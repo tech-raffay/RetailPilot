@@ -4,7 +4,7 @@ RetailPilot is a working retail management application for independent shops. Th
 
 ## Run locally
 
-Install Node.js 22.13 or later. The application uses the built-in SQLite driver and has no npm dependencies.
+Install Node.js 22.13 or later. The application uses the built-in SQLite driver and has no runtime npm dependencies.
 
 ```sh
 npm start
@@ -13,6 +13,14 @@ npm start
 Open http://127.0.0.1:4173. Run `npm test` for the acceptance tests or `npm run build` for a single-module Cloudflare Worker build. The local server stores data under `.retailpilot/retail.sqlite`. Set `RETAILPILOT_DATA_DIR` to use a different directory. Stop the process before backing up or restoring the entire data directory. Serve a production installation behind HTTPS and set `RETAILPILOT_HTTPS=1`.
 
 ## Try the sale and return
+
+To check the register and trial signup in Chromium, run the following from the repository root. The browser suite starts a separate server on port 4174 with a temporary in-memory database. GitHub Actions runs the application tests, Worker build and browser tests on pushes and pull requests.
+
+```sh
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
 
 1. Open Point of sale and select London.
 2. Search for JKT-001 or scan 5051100000000. Add two medium Canvas Field Jackets.

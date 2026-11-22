@@ -5,8 +5,10 @@ import {randomBytes,scrypt as derive,timingSafeEqual,createHash} from 'node:cryp
 import {promisify} from 'node:util';
 import {api} from '../src/api.js';
 import {openDatabase} from './local-db.mjs';
-const dir=resolve(process.env.RETAILPILOT_DATA_DIR||'.retailpilot');await mkdir(dir,{recursive:true});
-const DB=openDatabase(resolve(dir,'retail.sqlite')),sql=DB.raw;
+const dir=resolve(process.env.RETAILPILOT_DATA_DIR||'.retailpilot');
+const inMemory=process.argv.includes('--memory');
+if(!inMemory)await mkdir(dir,{recursive:true});
+const DB=openDatabase(inMemory?':memory:':resolve(dir,'retail.sqlite')),sql=DB.raw;
 sql.exec('CREATE TABLE IF NOT EXISTS local_accounts (email TEXT PRIMARY KEY, name TEXT, salt TEXT, verifier TEXT, recovery TEXT); CREATE TABLE IF NOT EXISTS local_logins (token TEXT PRIMARY KEY,email TEXT,expires INTEGER);');
 const scrypt=promisify(derive),digest=s=>createHash('sha256').update(s).digest('hex');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

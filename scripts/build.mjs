@@ -10,7 +10,7 @@ const zip = execFileSync(process.platform==='win32'?'python':'python3',['-c',[
  "import io,zipfile,sys,pathlib",
  "b=io.BytesIO()",
  "with zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED) as z:",
- " for item in ['README.md','package.json','.gitignore','public','scripts','src','drizzle','.openai']:",
+ " for item in ['README.md','package.json','package-lock.json','playwright.config.js','.gitignore','public','scripts','src','drizzle','tests','.openai','.github/workflows']:",
  "  p=pathlib.Path(item)",
  "  for f in ([p] if p.is_file() else sorted(p.rglob('*'))):",
  "   if f.is_file(): z.write(f,'RetailPilot/'+str(f))",
