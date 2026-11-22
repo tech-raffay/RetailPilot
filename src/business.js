@@ -29,6 +29,11 @@ export function checkout(s,b,member){
   if(b.method==='Demo card'&&b.decline)fail('Test card declined. Choose another payment method.',402);
   const received=b.method==='Cash'?num(b.received??total,total,999999999):total;
   const o={id:'ORD-'+(++s.sequence),key:b.key,date:Date.now(),store:b.store,customer:b.customer||'',operator:member.name,channel:'In-store',items,subtotal,discount,tax,total,received,method:b.method,status:b.method==='Stripe'?'Pending':'Paid'};
+  if(b.emailReceipt===true&&!s.demo){
+    const customer=s.customers.find(c=>c.id===o.customer);
+    if(!customer||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email))fail('Select a customer with a valid email to request a receipt.');
+    o.emailReceipt=true;
+  }
   for(const i of items)movement(s,productFor(s,i.id),o.store,-i.qty,'Sale',member.name,o.id);
   s.orders.push(o);return o;
 }

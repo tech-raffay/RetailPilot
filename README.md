@@ -64,6 +64,14 @@ The browser, API, payment adapter, seed catalog, and server-side business rules 
 
 The initial storage model suits demos and small pilot datasets. High-volume production use requires partitioning sales and stock movements into indexed tables to avoid document size and contention limits. Production operations also need scheduled backups, restore drills, retention enforcement, monitoring, and a deployment-specific access review.
 
+## Transactional email
+
+For business workspaces, configure `RESEND_API_KEY` and `RETAILPILOT_FROM_EMAIL` (a sender on your verified Resend domain) in the server environment. Locally, put them in the Git-ignored `.env.local` and restart the app. Use a reachable app origin for staff invitation links. Demo workspaces suppress email.
+
+At checkout, select a customer with an email address and tick **Email receipt**. Cash sales queue the receipt on confirmation. Stripe sales queue it when the signed paid webhook settles the order. A stock reduction crossing from above the threshold to the threshold or below queues an owner alert, including quantities reserved for Stripe checkout. Restocking above the threshold allows a later crossing to alert again.
+
+Owners can open **Settings → Email delivery** for queued, provider-accepted and failed counts. A provider acceptance records submission to Resend. Staff invitations also return a shareable link. Local delivery checks the durable queue every five seconds while the server is running. The Worker drains it on API traffic and supports a scheduled handler for deployments with a cron trigger. Transient errors retry with backoff and a stable provider idempotency key for up to 23 hours after the first attempt. Completed and failed jobs discard the email payload.
+
 ## Stripe test integration
 
 For local testing, save sandbox settings in `.env.local` in the repository root. Both `npm start` and `npm run dev` load this Git-ignored file on startup. Restart the local server after changing it.
@@ -78,4 +86,4 @@ Retail uses Stripe Checkout Sessions with a Stripe-Account header. Billing uses 
 
 Catalog and variants, barcode lookup, store inventory, adjustments, low-stock alerts, POS discounts and configurable VAT, cash and test-card checkout, printed receipts, orders and full returns, store-specific dashboard periods, reports and CSV exports, customer history, suppliers and purchase-order receiving, role-based staff invitations, subscription limits and workspace settings.
 
-The online storefront, automatic receipt and low-stock emails, WhatsApp delivery, offline queue, AI forecasts, platform super-admin, custom domains, and production monitoring are later milestones.
+The online storefront, WhatsApp delivery, offline queue, AI forecasts, platform super-admin, custom domains, and production monitoring are later milestones.

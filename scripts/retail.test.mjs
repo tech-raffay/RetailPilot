@@ -4,6 +4,7 @@ import {createHmac} from 'node:crypto';
 import {api} from '../src/api.js';
 import {openDatabase} from './local-db.mjs';
 import {verifyEvent} from '../src/payments.js';
+import {flushEmail} from '../src/email.js';
 const DB=openDatabase();
 async function call(path,body,cookie='',person='',email='',env={}){
  const res=await api(new Request('https://retail.test/api/'+path,{method:body===undefined?'GET':'POST',headers:{Cookie:cookie,'Content-Type':'application/json',...(person?{'oai-authenticated-user-id':person,'oai-authenticated-user-email':email||person+'@example.com'}:{})},body:body===undefined?undefined:JSON.stringify(body)}),{DB,...env});
@@ -11,6 +12,63 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('Stripe receipt waits for a signed paid event and pending receipt data is removed with its customer',async()=>{
+ const env={DB,RESEND_API_KEY:'mock',RETAILPILOT_FROM_EMAIL:'shop@example.test',STRIPE_WEBHOOK_SECRET:'whsec_mock'};
+ const owner=(await call('onboard',{name:'Stripe Mail',store:'London',owner:'Owner'},'','stripe-mail')).cookie;
+ const org=(await call('identity',undefined,owner,'stripe-mail')).body.workspaces[0].org_id;
+ const shop=JSON.parse(DB.raw.prepare('SELECT document FROM organizations WHERE id=?').get(org).document);
+ shop.stripeAccount='acct_mail';shop.customers.push({id:'buyer',email:'test@example.test'});
+ shop.orders.push({id:'ORD-23',method:'Stripe',status:'Pending',emailReceipt:true,customer:'buyer',date:Date.now(),store:'london',items:[],discount:0,tax:200,total:1200});
+ DB.raw.prepare('UPDATE organizations SET document=? WHERE id=?').run(JSON.stringify(shop),org);
+ async function event(id,payment_status){
+   const raw=JSON.stringify({id,type:'checkout.session.completed',livemode:false,account:'acct_mail',data:{object:{
+     currency:'gbp',amount_total:1200,payment_status,payment_intent:'pi_mail',metadata:{org,flow:'retail',order:'ORD-23'}}}});
+   const t=Math.floor(Date.now()/1000),signature=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(t+'.'+raw).digest('hex');
+   return api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',headers:{'Stripe-Signature':'t='+t+',v1='+signature},body:raw}),env);
+ }
+ const count=()=>DB.raw.prepare('SELECT count(*) AS n FROM email_outbox WHERE org_id=?').get(org).n;
+ assert.equal((await event('evt_unpaid','unpaid')).status,200);assert.equal(count(),0);
+ for(let i=0;i<2;i++)assert.equal((await event('evt_paid','paid')).status,200);
+ assert.equal(count(),1);
+ await call('customer/remove',{id:'buyer'},owner,'stripe-mail','',env);
+ assert.equal(count(),0);
+});
+test('transactional emails survive provider failure and deduplicate sales, threshold crossings and invites',async()=>{
+ const sent=[],env={DB,RESEND_API_KEY:'unit-test',RETAILPILOT_FROM_EMAIL:'shop@example.test',
+   MAIL_FETCH:async(url,init)=>{sent.push({key:init.headers['Idempotency-Key'],payload:JSON.parse(init.body)});return new Response(null,{status:503})}};
+ const person='mail-owner',owner=(await call('onboard',{name:'Mail Shop',store:'London',owner:'Mail Owner'},'',person)).cookie;
+ const org=(await call('identity',undefined,owner,person)).body.workspaces[0].org_id;
+ const post=(path,data)=>call(path,data,owner,person,'',env);
+ const product=(await post('product',{sku:'MAIL',name:'Jacket',category:'Coats',price:5999,cost:1000,threshold:9,quantity:10,store:'london'})).body;
+ const customer=(await post('customer',{name:'Buyer',email:'buyer@example.test'})).body;
+ const sale={...cart('email-sale'),items:[{id:product.id,qty:2}],customer:customer.id,emailReceipt:true};
+ for(let i=0;i<2;i++)assert.equal((await post('checkout',sale)).body.status,'Paid');
+ const jobs=()=>DB.raw.prepare('SELECT * FROM email_outbox WHERE org_id=? ORDER BY kind').all(org);
+ assert.deepEqual(jobs().map(j=>j.kind),['receipt','stock']);
+ await post('checkout',{...sale,key:'below-threshold',emailReceipt:false});
+ assert.equal(jobs().length,2);
+ assert.equal(JSON.parse(jobs()[1].payload).to[0],person+'@example.com');
+ assert.match(JSON.parse(jobs()[0].payload).text,/£119\.98/);
+ await flushEmail(env);
+ assert(jobs().every(j=>j.status==='queued'&&j.attempts===1));
+ const first=sent.slice();
+ DB.raw.prepare('UPDATE email_outbox SET next_attempt=0 WHERE org_id=?').run(org);
+ env.MAIL_FETCH=async(url,init)=>{sent.push({key:init.headers['Idempotency-Key'],payload:JSON.parse(init.body)});return new Response('{}')};
+ await Promise.all([flushEmail(env),flushEmail(env)]);
+ assert.deepEqual(sent.slice(2).sort((a,b)=>a.key.localeCompare(b.key)),first.sort((a,b)=>a.key.localeCompare(b.key)));
+ assert(jobs().every(j=>j.status==='accepted'&&j.payload===null));
+ const invitation={email:'staff@example.test',role:'Cashier',key:crypto.randomUUID()};
+ const invite=await post('invite',invitation);
+ assert.equal(invite.body.sent,true);
+ assert.equal((await post('invite',invitation)).body.link,invite.body.link);
+ assert.equal(sent.length,5);
+ assert.match(sent.at(-1).payload.text,/invite=/);
+ const status=await post('email/status',undefined);
+ assert.equal(status.body.counts.length,3);
+ const demoCookie=await demo();
+ await call('checkout',cart('demo-no-mail'),demoCookie,'','',env);
+ assert.equal(DB.raw.prepare('SELECT count(*) AS n FROM email_outbox WHERE org_id<>?').get(org).n,0);
+});
 test('a stock transfer is atomic, permission-checked and safe to retry',async()=>{
  const owner=await demo(),cashier=await demo('Cashier'),other=await demo();
  const request={product:'JKT-001',from:'london',to:'manchester',qty:4,key:'shift-1'};

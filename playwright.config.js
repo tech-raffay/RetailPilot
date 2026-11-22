@@ -9,6 +9,6 @@ export default defineConfig({
     command: 'node scripts/dev.mjs --memory --host 127.0.0.1 --port 4174',
     url: baseURL,
     reuseExistingServer: false,
-    env: { STRIPE_TEST_KEY: '', STRIPE_PRICE_STARTER: '', RETAILPILOT_HTTPS: '' }
+    env: { STRIPE_TEST_KEY: '', STRIPE_PRICE_STARTER: '', RETAILPILOT_HTTPS: '', RESEND_API_KEY: '', RETAILPILOT_FROM_EMAIL: '' }
   }
 });

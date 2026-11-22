@@ -4,11 +4,21 @@ import {resolve,extname,sep} from 'node:path';
 import {randomBytes,scrypt as derive,timingSafeEqual,createHash} from 'node:crypto';
 import {promisify} from 'node:util';
 import {api} from '../src/api.js';
+import {flushEmail,mailReady} from '../src/email.js';
 import {openDatabase} from './local-db.mjs';
 const dir=resolve(process.env.RETAILPILOT_DATA_DIR||'.retailpilot');
 const inMemory=process.argv.includes('--memory');
 if(!inMemory)await mkdir(dir,{recursive:true});
 const DB=openDatabase(inMemory?':memory:':resolve(dir,'retail.sqlite')),sql=DB.raw;
+if(mailReady(process.env)){
+ let draining=false;
+ setInterval(async()=>{
+   if(draining)return;
+   draining=true;
+   try{await flushEmail({...process.env,DB})}catch{console.error('Email queue check failed.')}
+   finally{draining=false}
+ },5000).unref();
+}
 sql.exec('CREATE TABLE IF NOT EXISTS local_accounts (email TEXT PRIMARY KEY, name TEXT, salt TEXT, verifier TEXT, recovery TEXT); CREATE TABLE IF NOT EXISTS local_logins (token TEXT PRIMARY KEY,email TEXT,expires INTEGER);');
 const scrypt=promisify(derive),digest=s=>createHash('sha256').update(s).digest('hex');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

@@ -2,14 +2,24 @@ import {newWorkspace,uid,plans} from './catalog.js';
 import {change,fail,permit,required,str,refund} from './business.js';
 import {stripeReady,stripe,verifyEvent} from './payments.js';
 import {planCatalogImport,commitCatalogImport} from './catalog-import.js';
+import {mailReady,receiptMessage,stockMessage,queueStatement,deliverEmail} from './email.js';
 const json=(v,status=200,headers={})=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store',...headers}});
 const hash=async token=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))),x=>x.toString(16).padStart(2,'0')).join('');
 const query=(db,sql,...args)=>db.prepare(sql).bind(...args);
 async function doc(db,id){return await query(db,'SELECT * FROM organizations WHERE id=?',id).first()||fail('Workspace not found.',404)}
-async function write(db,id,fn){
+async function write(db,id,fn,env,removedCustomer){
   for(let i=0;i<7;i++){
-    const row=await doc(db,id),s=JSON.parse(row.document),v=fn(s);
-    const r=await query(db,'UPDATE organizations SET document=?,revision=revision+1 WHERE id=? AND revision=?',JSON.stringify(s),id,row.revision).run();
+    const row=await doc(db,id),s=JSON.parse(row.document),jobs=[];
+    const moves=s.movements.length,orders=s.orders.length,v=fn(s,jobs);
+    const statements=[];
+    if(!s.demo&&mailReady(env)){
+      if(s.orders.length>orders)jobs.push(receiptMessage(s,s.orders.at(-1)));
+      if(s.movements.length>moves)jobs.push(await stockMessage(db,id,s,s.movements.slice(moves)));
+      for(const job of jobs.filter(Boolean))statements.push(queueStatement(env,id,job,row.revision));
+    }
+    if(removedCustomer)statements.push(query(db,"DELETE FROM email_outbox WHERE org_id=? AND customer_id=? AND EXISTS (SELECT 1 FROM organizations WHERE id=? AND revision=?)",id,removedCustomer,id,row.revision));
+    const update=query(db,'UPDATE organizations SET document=?,revision=revision+1 WHERE id=? AND revision=?',JSON.stringify(s),id,row.revision);
+    const r=statements.length?(await db.batch([...statements,update])).at(-1):await update.run();
     if(r.meta.changes)return v;
   }
   fail('Another sale is being saved. Please retry.',409);
@@ -53,19 +63,19 @@ async function webhook(req,env){
   if(event.livemode)fail('Only test events are accepted.');
   const o=event.data.object,meta=o.metadata||{},id=meta.org;
   if(!id)return json({received:true});
-  await write(env.DB,id,s=>{
+  await write(env.DB,id,(s,jobs)=>{
     if(s.events.includes(event.id))return;
     if(meta.flow==='retail'){
       if(!s.stripeAccount||event.account!==s.stripeAccount)fail('Merchant mismatch.');
       const order=s.orders.find(x=>x.id===meta.order)||fail('Unknown order.');
-      if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&o.amount_total===order.total&&o.currency==='gbp'&&order.status==='Pending'){order.status='Paid';order.intent=o.payment_intent}
+      if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&o.amount_total===order.total&&o.currency==='gbp'&&order.status==='Pending'){order.status='Paid';order.intent=o.payment_intent;jobs.push(receiptMessage(s,order))}
       if(event.type==='checkout.session.expired'&&order.status==='Pending'){order.status='Cancelled';for(const l of order.items){const p=s.products.find(p=>p.id===l.id);p.stock[order.store]+=l.qty;s.movements.push({id:uid(),date:Date.now(),name:p.name,product:p.id,store:order.store,delta:l.qty,after:p.stock[order.store],reason:'Expired checkout',ref:order.id,actor:'Stripe'})}}
     }else if(meta.flow==='billing'&&!event.account){
       if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&plans[meta.plan]){s.plan=meta.plan;s.billing='active';s.stripeCustomer=o.customer;s.subscription=o.subscription}
       if(event.type.startsWith('customer.subscription.')&&o.id===s.subscription){const subPlan=Object.keys(plans).find(p=>env['STRIPE_PRICE_'+p.toUpperCase()]===o.items?.data?.[0]?.price?.id&&o.items?.data?.[0]?.price?.id);if(subPlan)s.plan=subPlan;s.billing=o.status;s.graceEnd=s.graceEnd||Date.now()+3*86400000;if(o.status==='active')s.graceEnd=null}
     }
     s.events.push(event.id);
-  });return json({received:true});
+  },env);return json({received:true});
 }
 export async function api(req,env){
  try{
@@ -94,6 +104,11 @@ export async function api(req,env){
   }
   if(!m)fail('Choose a workspace to continue.',401);
   const id=m.org_id;
+  if(path==='email/status'&&req.method==='GET'){
+    permit(m.role,['Owner']);
+    const counts=(await query(db,'SELECT kind,status,count(*) AS count FROM email_outbox WHERE org_id=? GROUP BY kind,status',id).all()).results;
+    return json({configured:mailReady(env),counts});
+  }
   if(path==='customer/export'&&req.method==='GET'){
     permit(m.role,['Owner']);
     const workspace=JSON.parse((await doc(db,id)).document);
@@ -116,11 +131,12 @@ export async function api(req,env){
     const s=JSON.parse((await doc(db,id)).document);
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
     delete s.events;delete s.audit;delete s.catalogImports;
-    return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),billingEnabled:stripeReady(env),signedIn:!!principal(req)});
+    return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
   }
   if(req.method!=='POST')fail('Route not found.',404);
   if(path==='logout'){const t=(req.headers.get('Cookie')||'').match(/rp_session=([a-f0-9-]+)/)?.[1];if(t)await query(db,'DELETE FROM sessions WHERE token=?',await hash(t)).run();return json({ok:true},200,{'Set-Cookie':'rp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'})}
   const current=JSON.parse((await doc(db,id)).document);
+  if(path==='checkout'&&b.emailReceipt===true&&!mailReady(env)&&!current.orders.some(o=>o.key===b.key))fail('Email receipts are unavailable. Clear the receipt option to continue.',503);
   if(!current.demo&&!['stripe/billing','stripe/portal'].includes(path)&&((current.billing==='trial'&&current.trialEnd<Date.now())||(['past_due','canceled','unpaid'].includes(current.billing)&&current.graceEnd<Date.now())))fail('Your workspace is read-only. Update billing to continue.',403);
   if(path==='products/import/preview'||path==='products/import'){
     permit(m.role,['Owner','Manager']);
@@ -139,10 +155,24 @@ export async function api(req,env){
     permit(m.role,['Owner']);const email=str(b.email).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['Manager','Cashier'].includes(b.role))fail('Enter a valid email and role.');
     if(current.demo)fail('Create a business workspace before inviting real staff.');
     if((await members(db,id)).length>=plans[current.plan].staff)fail('Upgrade your plan to invite more staff.',403);
-    const token=uid()+uid();await query(db,'INSERT INTO invites VALUES(?,?,?,?,?)',await hash(token),id,email,b.role,Date.now()+7*86400000).run();
-    const link=u.origin+'/?invite='+token;let sent=false;
-    if(env.RESEND_API_KEY&&env.RETAILPILOT_FROM_EMAIL){try{const delivery=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+env.RESEND_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({from:env.RETAILPILOT_FROM_EMAIL,to:[email],subject:'Your RetailPilot team invitation',text:m.name+' invited you to '+current.name+' as a '+b.role+'. Sign in with this email to accept within seven days: '+link})});sent=delivery.ok}catch{}}
-    return json({link,sent});
+    let token=uid()+uid();
+    if(mailReady(env)&&typeof b.key==='string'&&/^[a-f0-9-]{36}$/.test(b.key)){
+      const enc=new TextEncoder();
+      const secret=await crypto.subtle.importKey('raw',enc.encode(env.RESEND_API_KEY),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+      const bytes=await crypto.subtle.sign('HMAC',secret,enc.encode(JSON.stringify([id,email,b.role,b.key])));
+      token=Array.from(new Uint8Array(bytes),v=>v.toString(16).padStart(2,'0')).join('');
+    }
+    const digest=await hash(token),link=u.origin+'/?invite='+token;
+    if(await query(db,'SELECT principal FROM members WHERE org_id=? AND email=?',id,email).first())fail('This email already belongs to your team.',409);
+    const insert=query(db,'INSERT OR IGNORE INTO invites VALUES(?,?,?,?,?)',digest,id,email,b.role,Date.now()+7*86400000);
+    if(!mailReady(env)){await insert.run();return json({link,sent:false,queued:false})}
+    const job={kind:'invite',key:'invite/'+digest,to:email,subject:'Your RetailPilot team invitation',
+      text:m.name+' invited you to '+current.name+' as a '+b.role+'. Sign in with this email to accept within seven days: '+link};
+    await db.batch([insert,queueStatement(env,id,job)]);
+    const jobId=id+'/'+job.key;
+    try{await deliverEmail(env,jobId)}catch{}
+    const delivery=await query(db,'SELECT status FROM email_outbox WHERE id=?',jobId).first();
+    return json({link,sent:delivery?.status==='accepted',queued:delivery?.status==='queued'});
   }
   if(path==='member'){
     permit(m.role,['Owner']);const member=await query(db,'SELECT * FROM members WHERE org_id=? AND principal=?',id,str(b.principal,240)).first();
@@ -179,11 +209,11 @@ export async function api(req,env){
   }
   if(path==='checkout'&&b.method==='Stripe'){
     if(!current.stripeAccount||!stripeReady(env))fail('Connect a test merchant account first.');
-    const o=await write(db,id,s=>change(s,'checkout',b,m));
+    const o=await write(db,id,s=>change(s,'checkout',b,m),env);
     if(o.status!=='Pending')return json(o);
     const checkout=await retailCheckoutUrl(env,u.origin,id,o,current.stripeAccount);return json({...o,url:checkout.url});
   }
   if(path==='plan')b.memberCount=(await members(db,id)).length;
-  return json(await write(db,id,s=>change(s,path,b,m)));
+  return json(await write(db,id,s=>change(s,path,b,m),env,path==='customer/remove'?b.id:null));
  }catch(e){return json({error:e.status?e.message:'RetailPilot could not complete this request.'},e.status||500)}
 }

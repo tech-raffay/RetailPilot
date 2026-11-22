@@ -21,6 +21,13 @@ function resetCart(){ctx.cart={};ctx.customer='';ctx.discount=0;ctx.cartKey=cryp
 async function refresh(message){await load();render();if(message)notify(message)}
 function add(id){const p=ctx.s.products.find(p=>p.id===id),q=(ctx.cart[id]||0)+1;if(!p||q>(p.stock[localStore()]||0)){notify('No more units available at this store.');return}ctx.cart[id]=q;ctx.cartKey=crypto.randomUUID();bodyOnly()}
 async function act(action,id=''){
+ if(action==='emailStatus'){
+   const {configured,counts}=await api('email/status');
+   const kinds={receipt:'Sale receipts',stock:'Low-stock alerts',invite:'Staff invitations'};
+   const statuses={queued:'Queued',accepted:'Accepted by provider',failed:'Failed'};
+   const rows=counts.map(r=>'<div class="item-line"><span>'+esc(kinds[r.kind])+' · '+esc(statuses[r.status])+'</span><b>'+r.count+'</b></div>').join('');
+   return modal('Email delivery','<p>'+(configured?'Resend configured.':'Set RESEND_API_KEY and RETAILPILOT_FROM_EMAIL on the server to enable email.')+'</p>'+(rows||'<p>No email activity yet.</p>'));
+ }
  if(action==='catalogImportForm')return catalogImportForm();
  if(action==='localSignOut'){
    const response=await fetch('/local/logout',{method:'POST'});
@@ -53,7 +60,7 @@ document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLower
 document.querySelector('#modal').addEventListener('click',e=>{if(e.target===e.currentTarget){const r=e.currentTarget.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close()}});
 document.addEventListener('submit',async e=>{const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();if(busy)return;busy=true;const button=f.querySelector('[type=submit]');button.disabled=true;const b=Object.fromEntries(new FormData(f)),action=f.dataset.form;try{
  if(action==='discount'){ctx.discount=Number(b.discount);ctx.cartKey=crypto.randomUUID();close();bodyOnly();return}
- if(action==='checkout'){const method=b.method==='Decline'?'Demo card':b.method;const r=await api('checkout',{method,decline:b.method==='Decline',received:Math.round((Number(b.received)||0)*100),items:cartLines().map(l=>({id:l.p.id,qty:l.qty})),discount:ctx.discount,customer:ctx.customer,store:localStore(),key:ctx.cartKey});if(r.url){location.assign(r.url);return}resetCart();await refresh('Sale completed. Inventory updated.');orderDetail(r.id);return}
+ if(action==='checkout'){const method=b.method==='Decline'?'Demo card':b.method;const r=await api('checkout',{method,decline:b.method==='Decline',emailReceipt:b.emailReceipt==='on',received:Math.round((Number(b.received)||0)*100),items:cartLines().map(l=>({id:l.p.id,qty:l.qty})),discount:ctx.discount,customer:ctx.customer,store:localStore(),key:ctx.cartKey});if(r.url){location.assign(r.url);return}resetCart();await refresh('Sale completed. Inventory updated.');orderDetail(r.id);return}
  if(action==='catalogPreview'){await previewCatalogFile(f);return}
  if(action==='catalogCommit'){
    const result=await api('products/import',f.importPayload);
@@ -69,7 +76,7 @@ document.addEventListener('submit',async e=>{const f=e.target.closest('form[data
    return;
  }
  if(action==='product'){b.price=Math.round(Number(b.price)*100);b.cost=Math.round(Number(b.cost)*100)}
- if(action==='invite'){const r=await api(action,b);modal(r.sent?'Invitation emailed':'Invitation ready','<p>Share this link with '+esc(b.email)+'.</p><input class="full" readonly value="'+esc(r.link)+'" aria-label="Invitation link">');return}
+ if(action==='invite'){const r=await api(action,b);modal(r.sent?'Invitation emailed':r.queued?'Invitation email queued':'Invitation ready','<p>Share this link with '+esc(b.email)+'.</p><input class="full" readonly value="'+esc(r.link)+'" aria-label="Invitation link">');return}
  const r=await api(action,b);if(action==='onboard'||action==='join'){await load();resetCart();ctx.store='all';go('overview');notify('Workspace ready.');return}
  close();await refresh(action==='refund'?'Return recorded.':'Changes saved.');if(action==='refund')orderDetail(r.id)
  }catch(err){f.querySelector('.form-error').textContent=err.message}finally{busy=false;button.disabled=false}});

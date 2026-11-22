@@ -150,6 +150,10 @@ test('a new business can request paid Starter from its Starter trial', async ({ 
   await page.getByLabel('First store name').fill('London');
   await page.getByRole('button', { name: 'Create workspace', exact: true }).click();
   await expect(page.getByText('Business workspace', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Email delivery' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Set RESEND_API_KEY');
+  await page.getByRole('button', { name: 'Close',exact:true }).click();
   await page.getByRole('link', { name: 'Billing & plans' }).click();
 
   const request = page.waitForResponse(res => new URL(res.url()).pathname === '/api/stripe/billing');
