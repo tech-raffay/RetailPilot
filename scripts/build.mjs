@@ -2,7 +2,7 @@ import {readFile,readdir,writeFile,mkdir,copyFile,cp,rm} from 'node:fs/promises'
 import {execFileSync} from 'node:child_process';
 import {join,extname,relative,sep} from 'node:path';
 const root=process.cwd();
-const types={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.webp':'image/webp','.zip':'application/zip'};
+const types={'.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.html':'text/html; charset=utf-8','.webp':'image/webp','.csv':'text/csv; charset=utf-8','.zip':'application/zip'};
 await rm('dist',{recursive:true,force:true});await mkdir('dist/server',{recursive:true});await mkdir('dist/.openai',{recursive:true});
 await copyFile('.openai/hosting.json','dist/.openai/hosting.json');await cp('drizzle','dist/drizzle',{recursive:true});
 const assets={};async function walk(dir){for(const entry of await readdir(dir,{withFileTypes:true})){const path=join(dir,entry.name);if(entry.isDirectory()){await walk(path);continue}assets['/'+relative('public',path).split(sep).join('/')]=[types[extname(path)],(await readFile(path)).toString('base64')]}}await walk('public');
@@ -17,7 +17,7 @@ const zip = execFileSync(process.platform==='win32'?'python':'python3',['-c',[
  "sys.stdout.buffer.write(b.getvalue())"
 ].join('\n')],{maxBuffer:16*1024*1024});
 assets['/downloads/RetailPilot-source.zip']=['application/zip',zip.toString('base64')];
-let bundle='';for(const file of ['catalog','business','payments','api'])bundle+=(await readFile('src/'+file+'.js','utf8')).replace(/^import .*?;\r?\n/gm,'').replace(/^export /gm,'')+'\n';
+let bundle='';for(const file of ['catalog','business','catalog-import','payments','api'])bundle+=(await readFile('src/'+file+'.js','utf8')).replace(/^import .*?;\r?\n/gm,'').replace(/^export /gm,'')+'\n';
 bundle+='\nconst assets='+JSON.stringify(assets)+';\n';
 bundle+=`export default {async fetch(request,env){
 const url=new URL(request.url);

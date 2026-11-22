@@ -1,5 +1,37 @@
 import { test, expect } from '@playwright/test';
 
+test('catalog CSV template previews, imports and opens stock once', async ({page}) => {
+  await page.goto('/#products');
+  const open = page.getByRole('button',{name:'Import CSV'});
+  await open.click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('link',{name:'Download sample CSV'}).click();
+  const template = await downloaded;
+  expect(template.suggestedFilename()).toBe('catalog-template.csv');
+  const path = await template.path();
+  const file = page.getByLabel('CSV file');
+  await file.setInputFiles({name:'invalid.csv',mimeType:'text/csv',buffer:Buffer.from('sku,name,price,category\nJKT-001,Existing,19,Coats')});
+  await page.getByRole('button',{name:'Preview import'}).click();
+  await expect(page.getByText(/SKU already exists/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'Import 1 product'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Choose another file'}).click();
+  await page.getByLabel('Opening stock location').selectOption('manchester');
+  await file.setInputFiles(path);
+  await page.getByRole('button',{name:'Preview import'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Manchester');
+  await page.getByRole('button',{name:'Import 1 product',exact:true}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.getByRole('link',{name:/Inventory/}).click();
+  await page.getByLabel('Store location').selectOption('manchester');
+  await page.getByLabel('Search inventory').fill('SAMPLE-SHIRT-M');
+  await expect(page.getByRole('row').filter({hasText:'Sample Shirt'}).getByRole('cell').nth(2)).toHaveText('10');
+  await page.getByRole('link',{name:'Products',exact:true}).click();
+  await open.click();
+  await file.setInputFiles(path);
+  await page.getByRole('button',{name:'Preview import'}).click();
+  await expect(page.getByRole('heading',{name:'Already imported'})).toBeVisible();
+});
+
 test('owner can cancel or confirm customer profile removal', async ({ page }) => {
   await page.goto('/#customers');
   const row = page.getByRole('row').filter({ hasText: 'Amelia Brooks' });

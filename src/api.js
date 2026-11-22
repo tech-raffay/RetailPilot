@@ -1,6 +1,7 @@
 import {newWorkspace,uid,plans} from './catalog.js';
 import {change,fail,permit,required,str,refund} from './business.js';
 import {stripeReady,stripe,verifyEvent} from './payments.js';
+import {planCatalogImport,commitCatalogImport} from './catalog-import.js';
 const json=(v,status=200,headers={})=>new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store',...headers}});
 const hash=async token=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))),x=>x.toString(16).padStart(2,'0')).join('');
 const query=(db,sql,...args)=>db.prepare(sql).bind(...args);
@@ -114,13 +115,26 @@ export async function api(req,env){
   if(path==='state'&&req.method==='GET'){
     const s=JSON.parse((await doc(db,id)).document);
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
-    delete s.events;delete s.audit;
+    delete s.events;delete s.audit;delete s.catalogImports;
     return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),billingEnabled:stripeReady(env),signedIn:!!principal(req)});
   }
   if(req.method!=='POST')fail('Route not found.',404);
   if(path==='logout'){const t=(req.headers.get('Cookie')||'').match(/rp_session=([a-f0-9-]+)/)?.[1];if(t)await query(db,'DELETE FROM sessions WHERE token=?',await hash(t)).run();return json({ok:true},200,{'Set-Cookie':'rp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'})}
   const current=JSON.parse((await doc(db,id)).document);
   if(!current.demo&&!['stripe/billing','stripe/portal'].includes(path)&&((current.billing==='trial'&&current.trialEnd<Date.now())||(['past_due','canceled','unpaid'].includes(current.billing)&&current.graceEnd<Date.now())))fail('Your workspace is read-only. Update billing to continue.',403);
+  if(path==='products/import/preview'||path==='products/import'){
+    permit(m.role,['Owner','Manager']);
+    if(typeof b.csv!=='string'||b.csv.length>262144||typeof b.store!=='string')fail('Choose a store and a CSV file up to 256 KiB.');
+    const key=await hash(JSON.stringify([id,b.store,b.csv]));
+    const previous=current.catalogImports?.[key];
+    if(previous)return json({alreadyImported:true,count:previous.count});
+    const preview=await hash(key+'|'+current.vat);
+    if(path.endsWith('/preview')){
+      return json({...planCatalogImport(current,b.csv,b.store),preview});
+    }
+    if(b.preview!==preview)fail('Preview this file for the selected store before importing.',409);
+    return json(await write(db,id,s=>commitCatalogImport(s,b.csv,b.store,m,key,current.vat)));
+  }
   if(path==='invite'){
     permit(m.role,['Owner']);const email=str(b.email).toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!['Manager','Cashier'].includes(b.role))fail('Enter a valid email and role.');
     if(current.demo)fail('Create a business workspace before inviting real staff.');

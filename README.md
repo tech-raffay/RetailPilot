@@ -42,6 +42,12 @@ npm run test:e2e
 
 A demo card can return an approval or a decline. Neither action moves money. Seeded historical card orders represent sample transactions. Refunds are full-order refunds.
 
+## Catalog CSV import
+
+In Products, an owner or manager can choose **Import CSV**, download the sample, select the store for opening stock and preview a UTF-8 comma-separated file. Confirm to add all valid rows together. Existing products can be edited in Products. Re-uploading the same file for the same store reports the completed import. A different file containing an existing SKU or barcode shows a conflict.
+
+Use one row per variant, up to 500 rows and 256 KiB per file. Required headings are `sku`, `name`, `category` and `price`. Optional headings are `cost`, `barcode`, `size`, `color`, `quantity`, `threshold`, `tax` and `image_url`. Use decimal GBP amounts for price and cost, whole units for quantity and threshold, and a whole percentage for VAT. Blank optional numbers default to zero cost, zero units, threshold 5 and the workspace VAT rate. Format barcodes as text in spreadsheets to preserve leading zeros. Put fields containing commas or line breaks inside double quotes and double any quotes inside a quoted field.
+
 ## Workspaces and staff
 
 Use the workspace selector to open a fresh Owner or Cashier demo or create a business. Business workspaces start empty with a 14-day Starter trial. A business owner can create an invitation link for a specific staff email. Managers can operate the catalog, inventory and reports. Cashiers can ring up sales and return orders worth up to £100. The invitation recipient signs in to accept the link. Share invitation links manually, or configure RESEND_API_KEY and RETAILPILOT_FROM_EMAIL to deliver them by email. Owners can change staff roles or revoke access to active sessions.

@@ -1,4 +1,5 @@
 const paths={
+ upload:'<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
  pos:'<rect x="4" y="3" width="16" height="12" rx="2"/><path d="m8 15-3 5h14l-3-5M8 7h8"/>',
  bag:'<path d="M4 8h16l1 13H3L4 8Z"/><path d="M8 9V6a4 4 0 0 1 8 0v3"/>',

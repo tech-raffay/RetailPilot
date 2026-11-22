@@ -11,6 +11,52 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('CSV preview is read-only and concurrent confirmations create one batch in the selected store',async()=>{
+ const cookie=await demo(),other=await demo(),cashier=await demo('Cashier');
+ const csv='\uFEFFname,price,sku,category,quantity,barcode,cost\r\n"Coat, ""Blue""",19.95,CSV-1,Coats,4,001234,8.40\r\n"Summer\nShirt",12,CSV-2,Shirts,0,,\r\n';
+ const batch={store:'manchester',csv};
+ const preview=await call('products/import/preview',batch,cookie);
+ assert.equal(preview.body.valid,true);
+ assert.deepEqual(preview.body.rows.map(r=>r.line),[2,3]);
+ assert.equal(preview.body.rows[0].product.name,'Coat, "Blue"');
+ const commit={...batch,preview:preview.body.preview};
+ assert.equal((await call('state',undefined,cookie)).body.workspace.products.some(p=>p.sku==='CSV-1'),false);
+ assert.equal((await call('products/import',commit,other)).status,409);
+ assert.equal((await call('products/import',{...commit,store:'london'},cookie)).status,409);
+ assert.equal((await call('products/import/preview',batch,cashier)).status,403);
+ assert.equal((await call('products/import',commit,cashier)).status,403);
+ const results=await Promise.all([call('products/import',commit,cookie),call('products/import',commit,cookie)]);
+ assert.deepEqual(results.map(r=>r.body.alreadyImported).sort(),[false,true]);
+ assert.equal((await call('products/import/preview',batch,cookie)).body.alreadyImported,true);
+ const s=(await call('state',undefined,cookie)).body.workspace;
+ const imported=s.products.filter(p=>p.sku.startsWith('CSV-'));
+ assert.equal(imported.length,2);
+ assert.equal(imported[0].price,1995);assert.equal(imported[0].cost,840);assert.equal(imported[0].barcode,'001234');
+ assert.deepEqual(imported[0].stock,{manchester:4});assert.equal(imported[1].name,'Summer\nShirt');
+ assert.equal(s.movements.filter(m=>m.product===imported[0].id&&m.delta===4&&m.store==='manchester').length,1);
+});
+
+test('CSV import reports bad rows, enforces file limits and rechecks conflicts atomically',async()=>{
+ const c=await demo(),header='sku,name,category,price,quantity,barcode';
+ const preview=csv=>call('products/import/preview',{store:'london',csv},c);
+ const invalid=await preview(header+'\nJKT-001,Existing,Coats,2,1,001\nNEW,X,Tops,-1,2.5,001\nnew,Y,Tops,3,0,\nBAD,X,Tops');
+ assert.equal(invalid.body.valid,false);
+ assert.deepEqual(invalid.body.rows.map(r=>r.line),[2,3,4,5]);
+ assert.match(invalid.body.rows[1].errors.join(' '),/Barcode/);
+ assert.match(invalid.body.rows[1].errors.join(' '),/price/);
+ assert.match(invalid.body.rows[1].errors.join(' '),/quantity/);
+ assert.match(invalid.body.rows[2].errors.join(' '),/SKU/);
+ assert.match(invalid.body.rows[3].errors.join(' '),/Column count/);
+ for(const csv of ['name,price\nx,2',header+'\n"open',header+',sku\n',header+'\n',header+',mystery\n',header+'\n'+('a,x,c,2,1,\n').repeat(501),'x'.repeat(262145)]){
+   assert.equal((await preview(csv)).status,400);
+ }
+ const csv=header+'\nA-1,One,Tops,2,1,\nA-2,Two,Tops,2,1,';
+ const p=await preview(csv);
+ await call('product',{sku:'A-2',name:'Manual addition',category:'Tops',price:200,cost:0,quantity:1,threshold:5,store:'london'},c);
+ const commit=await call('products/import',{store:'london',csv,preview:p.body.preview},c);
+ assert.equal(commit.status,409);
+ assert.equal((await call('state',undefined,c)).body.workspace.products.some(row=>row.sku==='A-1'),false);
+});
 test('removing a customer detaches only that profile and preserves stock and sale records',async()=>{
  const owner=await demo();
  const {body:customer}=await call('customer',{name:'Removal test',email:'remove@example.test',phone:'123',consent:true},owner);

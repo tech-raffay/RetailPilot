@@ -1,0 +1,2 @@
+sku,name,category,price,cost,barcode,size,color,quantity,threshold,tax,image_url
+SAMPLE-SHIRT-M,Sample Shirt,Shirts,29.95,12.50,0500000000001,M,Blue,10,3,20,

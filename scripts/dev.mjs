@@ -14,7 +14,7 @@ const scrypt=promisify(derive),digest=s=>createHash('sha256').update(s).digest('
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const port=Number(process.argv[process.argv.indexOf('--port')+1])||Number(process.env.PORT)||4173;
 const host=process.argv.includes('--host')?process.argv[process.argv.indexOf('--host')+1]:process.env.HOST||'127.0.0.1';
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.webp':'image/webp','.zip':'application/zip'};
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.webp':'image/webp','.csv':'text/csv; charset=utf-8','.zip':'application/zip'};
 const page=(title,body)=>'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><title>'+esc(title)+' · RetailPilot</title><main style="max-width:460px;margin:8vh auto"><a href="/" class="brand"><img width="36" src="/mark.svg" alt="">RetailPilot</a><section class="panel settings"><h1>'+esc(title)+'</h1><div class="modal-body">'+body+'</div></section></main></html>';
 const input=(key,label,type='text')=>'<label class="field">'+label+'<input required type="'+type+'" name="'+key+'"></label>';
 const attempts=new Map();

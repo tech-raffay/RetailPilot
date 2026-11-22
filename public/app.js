@@ -2,6 +2,7 @@ import {ctx,buyer,esc,icon,money,initials,api,load,notify,modal,close,btn,field,
 import {dashboard,best} from './dashboard.js';
 import {products,inventory,sales,customers,suppliers,reports,staff,settings,billing,pos,cartLines,totals} from './views.js';
 import {showForm,orderDetail} from './dialogs.js';
+import {catalogImportForm,previewCatalogFile} from './catalog-import.js';
 const nav=[
  ['Workspace',[['overview','Overview','grid',dashboard],['pos','Point of sale','pos',pos],['orders','Orders','receipt',sales],['products','Products','box',products],['inventory','Inventory','layers',inventory],['customers','Customers','users',customers]]],
  ['Management',[['reports','Reports','chart',reports],['suppliers','Suppliers','truck',suppliers],['staff','Team members','team',staff],['billing','Billing & plans','card',billing],['settings','Settings','settings',settings]]]
@@ -20,6 +21,7 @@ function resetCart(){ctx.cart={};ctx.customer='';ctx.discount=0;ctx.cartKey=cryp
 async function refresh(message){await load();render();if(message)notify(message)}
 function add(id){const p=ctx.s.products.find(p=>p.id===id),q=(ctx.cart[id]||0)+1;if(!p||q>(p.stock[localStore()]||0)){notify('No more units available at this store.');return}ctx.cart[id]=q;ctx.cartKey=crypto.randomUUID();bodyOnly()}
 async function act(action,id=''){
+ if(action==='catalogImportForm')return catalogImportForm();
  if(action==='localSignOut'){
    const response=await fetch('/local/logout',{method:'POST'});
    if(!response.ok)throw new Error('Sign out failed. Please try again.');
@@ -52,6 +54,12 @@ document.querySelector('#modal').addEventListener('click',e=>{if(e.target===e.cu
 document.addEventListener('submit',async e=>{const f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();if(busy)return;busy=true;const button=f.querySelector('[type=submit]');button.disabled=true;const b=Object.fromEntries(new FormData(f)),action=f.dataset.form;try{
  if(action==='discount'){ctx.discount=Number(b.discount);ctx.cartKey=crypto.randomUUID();close();bodyOnly();return}
  if(action==='checkout'){const method=b.method==='Decline'?'Demo card':b.method;const r=await api('checkout',{method,decline:b.method==='Decline',received:Math.round((Number(b.received)||0)*100),items:cartLines().map(l=>({id:l.p.id,qty:l.qty})),discount:ctx.discount,customer:ctx.customer,store:localStore(),key:ctx.cartKey});if(r.url){location.assign(r.url);return}resetCart();await refresh('Sale completed. Inventory updated.');orderDetail(r.id);return}
+ if(action==='catalogPreview'){await previewCatalogFile(f);return}
+ if(action==='catalogCommit'){
+   const result=await api('products/import',f.importPayload);
+   close();await refresh(result.alreadyImported?'File already imported.':result.count+' products imported.');
+   return;
+ }
  if(action==='member')b.remove=b.remove==='on';
  if(action==='product'){b.price=Math.round(Number(b.price)*100);b.cost=Math.round(Number(b.cost)*100)}
  if(action==='invite'){const r=await api(action,b);modal(r.sent?'Invitation emailed':'Invitation ready','<p>Share this link with '+esc(b.email)+'.</p><input class="full" readonly value="'+esc(r.link)+'" aria-label="Invitation link">');return}
