@@ -44,6 +44,8 @@ The initial storage model suits demos and small pilot datasets. High-volume prod
 
 ## Stripe test integration
 
+For local testing, save sandbox settings in `.env.local` in the repository root. Both `npm start` and `npm run dev` load this Git-ignored file on startup. Restart the local server after changing it.
+
 All secrets stay on the server. Only Stripe test keys are accepted. Set STRIPE_TEST_KEY and STRIPE_WEBHOOK_SECRET. Configure the platform and connected-account event destinations using /api/stripe/webhook with the matching signing secrets (use STRIPE_CONNECT_WEBHOOK_SECRET when the connected-account endpoint has a different secret). For subscriptions, set STRIPE_PRICE_STARTER, STRIPE_PRICE_GROWTH, and STRIPE_PRICE_BUSINESS to test recurring GBP prices. The billing portal must be enabled in Stripe.
 
 For a merchant direct charge, assign the connected test account in STRIPE_ACCOUNTS as an org-id=acct_id pair (comma-separated for multiple accounts), then enter the assigned account in Store settings. Get the relevant org ID from the authenticated /api/identity response. The provider account needs to exist and be eligible for the chosen flow.
