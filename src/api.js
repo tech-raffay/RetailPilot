@@ -93,6 +93,24 @@ export async function api(req,env){
   }
   if(!m)fail('Choose a workspace to continue.',401);
   const id=m.org_id;
+  if(path==='customer/export'&&req.method==='GET'){
+    permit(m.role,['Owner']);
+    const workspace=JSON.parse((await doc(db,id)).document);
+    const customer=workspace.customers.find(c=>c.id===u.searchParams.get('id'));
+    if(!customer)fail('Customer not found.',404);
+    const purchases=workspace.orders.filter(o=>o.customer===customer.id).map(o=>({
+      order:o.id,date:new Date(o.date).toISOString(),store:workspace.stores.find(s=>s.id===o.store)?.name||o.store,
+      channel:o.channel,method:o.method,status:o.status,totalPence:o.total,vatPence:o.tax,discountPercent:o.discount,
+      items:o.items.map(i=>({sku:i.sku,name:i.name,size:i.size,quantity:i.qty,unitPricePence:i.price})),
+      ...(o.refund?{refund:{date:new Date(o.refund.date).toISOString(),reason:o.refund.reason}}:{})
+    }));
+    const report={business:workspace.name,currency:'GBP',customer:{id:customer.id,name:customer.name,
+      email:customer.email,phone:customer.phone,marketingConsent:customer.consent===true},purchases};
+    return new Response(JSON.stringify(report,null,2),{headers:{
+      'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
+      'Content-Disposition':'attachment; filename="customer-export.json"'
+    }});
+  }
   if(path==='state'&&req.method==='GET'){
     const s=JSON.parse((await doc(db,id)).document);
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}

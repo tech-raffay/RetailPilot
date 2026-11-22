@@ -1,5 +1,20 @@
 import { test, expect } from '@playwright/test';
 
+test('owner downloads a customer profile from the customer list', async ({ page }) => {
+  await page.goto('/#customers');
+  const row = page.getByRole('row').filter({ hasText: 'Amelia Brooks' });
+  await row.click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download customer data' }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('customer-export.json');
+  const chunks = [];
+  for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+  const report = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(report.customer.name).toBe('Amelia Brooks');
+  expect(report.purchases.length).toBeGreaterThan(0);
+});
+
 test('London jacket sale produces a receipt and the return restores inventory', async ({ page }) => {
   await page.goto('/#pos');
   await expect(page.getByLabel('Store location')).toHaveValue('london');

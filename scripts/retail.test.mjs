@@ -11,6 +11,26 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('customer download is owner-only, tenant-scoped and limited to the requested buyer',async()=>{
+ const owner=await demo();
+ const {body:customer}=await call('customer',{name:'Export buyer',email:'buyer@example.test',consent:true},owner);
+ const path='customer/export?id='+customer.id;
+ await call('checkout',cart('walk-in'),owner);
+ const {body:sale}=await call('checkout',{...cart('customer-sale'),customer:customer.id},owner);
+ await call('refund',{id:sale.id,reason:'Wrong size',restock:true},owner);
+ const report=await call(path,undefined,owner);
+ assert.equal(report.status,200);
+ assert.equal(report.body.customer.marketingConsent,true);
+ assert.deepEqual(report.body.purchases.map(o=>o.order),[sale.id]);
+ const [purchase]=report.body.purchases;
+ assert.equal(purchase.totalPence,11998);
+ assert.equal(purchase.refund.reason,'Wrong size');
+ assert.equal(purchase.items[0].cost,undefined);
+ assert.equal(purchase.key,undefined);
+ assert.equal((await call(path,undefined,await demo())).status,404);
+ assert.equal((await call(path,undefined,await demo('Cashier'))).status,403);
+ assert.equal((await call(path)).status,401);
+});
 test('cash sale, VAT-inclusive receipt, refund, restock, and duplicate submissions',async()=>{
  const c=await demo(),before=(await call('state',undefined,c)).body.workspace;
  const r=await call('checkout',cart('sale-1'),c);assert.equal(r.status,200);assert.equal(r.body.total,11998);assert.equal(r.body.tax,2000);assert.equal(r.body.received-r.body.total,188002);
