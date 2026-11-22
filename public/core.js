@@ -6,7 +6,7 @@ export const money=(p,dec=2)=>new Intl.NumberFormat('en-GB',{style:'currency',cu
 export const date=(n,opts={day:'numeric',month:'short'})=>new Intl.DateTimeFormat('en-GB',opts).format(n);
 export const initials=n=>n.split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
 export const storeName=id=>ctx.s.stores.find(x=>x.id===id)?.name||'All stores';
-export const buyer=id=>ctx.s.customers.find(x=>x.id===id)?.name||'Walk-in customer';
+export const buyer=id=>id===null?'Removed customer':ctx.s.customers.find(x=>x.id===id)?.name||'Walk-in customer';
 export const localStore=()=>ctx.store==='all'?ctx.s.stores[0].id:ctx.store;
 export function stock(p){return ctx.store==='all'?Object.values(p.stock).reduce((a,b)=>a+b,0):(p.stock[ctx.store]||0)}
 export function lowItems(){return ctx.s.products.flatMap(p=>ctx.s.stores.filter(s=>(ctx.store==='all'||ctx.store===s.id)&&(p.stock[s.id]||0)<=p.threshold).map(s=>({p,store:s.id,n:p.stock[s.id]||0})))}
@@ -34,7 +34,7 @@ export function pager(total){const n=Math.ceil(total/20);return n>1?`<div class=
 export const slice=rows=>rows.slice(ctx.pageNo*20,ctx.pageNo*20+20);
 export const searchInput=label=>`<label class="searchfield">${icon('search',17)}<input id="filterSearch" value="${esc(ctx.q)}" aria-label="${label}" placeholder="${label}"></label>`;
 export async function api(path,data){const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const v=await r.json();if(!r.ok)throw Object.assign(new Error(v.error||'Request failed'),{status:r.status});return v}
-export async function load(){const r=await api('state');Object.assign(ctx,{s:r.workspace,member:r.member,members:r.members,cardEnabled:r.cardEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});if(ctx.store!=='all'&&!ctx.s.stores.some(s=>s.id===ctx.store))ctx.store='all'}
+export async function load(){const r=await api('state');Object.assign(ctx,{s:r.workspace,member:r.member,members:r.members,cardEnabled:r.cardEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});if(ctx.store!=='all'&&!ctx.s.stores.some(s=>s.id===ctx.store))ctx.store='all';if(ctx.customer&&!ctx.s.customers.some(c=>c.id===ctx.customer)){ctx.customer='';ctx.cartKey=crypto.randomUUID()}}
 export function notify(msg){const t=document.querySelector('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t.timer);t.timer=setTimeout(()=>t.classList.remove('show'),3200)}
 export function close(){const d=document.querySelector('#modal');d.close();d.innerHTML=''}
 export function modal(title,body,wide=false){const d=document.querySelector('#modal');d.className=wide?'wide':'';d.innerHTML=`<div class="modal-head"><h2>${esc(title)}</h2><button data-act="close" class="iconbtn" aria-label="Close">${icon('close')}</button></div><div class="modal-body">${body}</div>`;if(!d.open)d.showModal()}

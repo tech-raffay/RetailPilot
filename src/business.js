@@ -54,6 +54,15 @@ export function change(s,action,b,m){
     const p={id:old?.id||uid(),stock:old?.stock||{},name:required(b.name,'a product name'),sku,barcode:str(b.barcode),category:required(b.category,'a category'),price:num(b.price,0,99999999),cost:num(b.cost,0,99999999),tax:num(b.tax??s.vat,0,100),threshold:num(b.threshold,0,99999),size:str(b.size),color:str(b.color),photo:old?.photo||'',imageUrl:b.imageUrl&&/^https:\/\//.test(b.imageUrl)?str(b.imageUrl,1000):''};
     if(old)Object.assign(old,p);else{s.products.push(p);storeFor(s,b.store);const n=num(b.quantity||0,0,999999);if(n)movement(s,p,b.store,n,'Opening stock',m.name,'')}
     out=p;
+  }else if(action==='customer/remove'){
+    permit(m.role,['Owner']);
+    const index=s.customers.findIndex(customer=>customer.id===b.id);
+    if(index<0)fail('Customer not found.',404);
+    s.customers.splice(index,1);
+    for(const order of s.orders){
+      if(order.customer===b.id)order.customer=null;
+    }
+    out={id:b.id};
   }else if(action==='customer'||action==='supplier'){
     const row={id:uid(),name:required(b.name,'a name'),email:str(b.email),phone:str(b.phone),consent:!!b.consent};s[action==='customer'?'customers':'suppliers'].push(row);out=row;
   }else if(action==='purchase'){

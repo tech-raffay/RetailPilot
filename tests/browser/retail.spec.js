@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 
+test('owner can cancel or confirm customer profile removal', async ({ page }) => {
+  await page.goto('/#customers');
+  const row = page.getByRole('row').filter({ hasText: 'Amelia Brooks' });
+  const remove = page.getByRole('button', { name: 'Remove profile' });
+  await row.click();
+  await remove.click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await row.click();
+  await remove.click();
+  await page.getByRole('button', { name: 'Confirm removal' }).click();
+  await expect(row).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Customers', exact: true })).toBeVisible();
+  await expect(row).toHaveCount(0);
+});
+
 test('owner downloads a customer profile from the customer list', async ({ page }) => {
   await page.goto('/#customers');
   const row = page.getByRole('row').filter({ hasText: 'Amelia Brooks' });

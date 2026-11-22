@@ -11,6 +11,24 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('removing a customer detaches only that profile and preserves stock and sale records',async()=>{
+ const owner=await demo();
+ const {body:customer}=await call('customer',{name:'Removal test',email:'remove@example.test',phone:'123',consent:true},owner);
+ const {body:sale}=await call('checkout',{...cart('profile-removal'),customer:customer.id},owner);
+ const before=(await call('state',undefined,owner)).body.workspace;
+ const request={id:customer.id};
+ assert.equal((await call('customer/remove',request,await demo('Cashier'))).status,403);
+ assert.equal((await call('customer/remove',request,await demo())).status,404);
+ assert.equal((await call('customer/remove',request,owner)).status,200);
+ assert.equal((await call('customer/remove',request,owner)).status,404);
+ assert.equal((await call('customer/export?id='+customer.id,undefined,owner)).status,404);
+ const after=(await call('state',undefined,owner)).body.workspace;
+ assert.deepEqual(after.customers,before.customers.filter(c=>c.id!==customer.id));
+ assert.deepEqual(after.orders,before.orders.map(o=>o.id===sale.id?{...o,customer:null}:o));
+ assert.deepEqual(after.products,before.products);
+ assert.deepEqual(after.movements,before.movements);
+ assert.equal((await call('refund',{id:sale.id,reason:'Size',restock:true},owner)).body.status,'Refunded');
+});
 test('customer download is owner-only, tenant-scoped and limited to the requested buyer',async()=>{
  const owner=await demo();
  const {body:customer}=await call('customer',{name:'Export buyer',email:'buyer@example.test',consent:true},owner);
