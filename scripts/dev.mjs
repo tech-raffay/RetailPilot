@@ -48,8 +48,18 @@ http.createServer(async(req,res)=>{try{
  const token=(hdr.get('cookie')||'').match(/(?:^|;\s*)rp_local=([a-f0-9]+)/)?.[1];
  const account=token&&sql.prepare('SELECT a.email FROM local_logins l JOIN local_accounts a ON l.email=a.email WHERE token=? AND expires>?').get(digest(token),Date.now());
  if(account){hdr.set('oai-authenticated-user-id','local:'+account.email);hdr.set('oai-authenticated-user-email',account.email)}
+ if(url.pathname==='/local/logout'){
+   if(req.method!=='POST'){res.writeHead(405,{Allow:'POST'}).end();return}
+   const session=(hdr.get('cookie')||'').match(/(?:^|;\s*)rp_session=([a-f0-9-]+)/)?.[1];
+   await DB.batch([
+     DB.prepare('DELETE FROM local_logins WHERE token=?').bind(digest(token||'')),
+     DB.prepare('UPDATE sessions SET expires=0 WHERE token=?').bind(digest(session||''))
+   ]);
+   const expired='=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'+(process.env.RETAILPILOT_HTTPS==='1'?'; Secure':'');
+   res.writeHead(204,{'Cache-Control':'no-store','Set-Cookie':['rp_local'+expired,'rp_session'+expired]}).end();return
+ }
  const chunks=[];let length=0;for await(const c of req){length+=c.length;if(length>2e6){res.writeHead(413).end();return}chunks.push(c)}const body=Buffer.concat(chunks).toString();
- if(url.pathname.startsWith('/api/')){const response=await api(new Request(url,{method:req.method,headers:hdr,...(req.method==='GET'||req.method==='HEAD'?{}:{body})}),{...process.env,DB});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return}
+ if(url.pathname.startsWith('/api/')){const response=await api(new Request(url,{method:req.method,headers:hdr,...(req.method==='GET'||req.method==='HEAD'?{}:{body})}),{...process.env,DB,LOCAL_AUTH:true});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return}
  if(url.pathname.startsWith('/local/')||url.pathname==='/signin-with-chatgpt'){const headers={'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'};const ret=await auth(req,url,body,headers);res.writeHead(headers.Location?303:200,headers).end(ret);return}
  const root=resolve('public'),path=resolve(root,'.'+(url.pathname==='/'?'/index.html':decodeURIComponent(url.pathname)));if(!path.startsWith(root+sep)){res.writeHead(404).end();return}
  const file=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff'});res.end(file)

@@ -73,3 +73,24 @@ test('a new business can request paid Starter from its Starter trial', async ({ 
   await expect(page.getByText('This test billing price has not been configured.')).toBeVisible();
   await expect(page.getByText('trial', { exact: true })).toBeVisible();
 });
+
+test('sign out ends local access in both register tabs', async ({ page, context, playwright, baseURL }) => {
+  const credentials = { email: 'shift@example.test', password: 'Local-shift-test-only' };
+  await context.request.post('/local/signup', { form: { ...credentials, name: 'Shift owner' } });
+  await context.request.post('/local/signin', { form: credentials });
+  await context.request.post('/api/onboard', { data: { name: 'Shift shop', owner: 'Owner', store: 'London' } });
+  const other = await context.newPage();
+  await Promise.all([page.goto('/'), other.goto('/#pos')]);
+  await expect(other.getByRole('heading', { name: 'Point of sale' })).toBeVisible();
+  const oldSession = await playwright.request.newContext({ baseURL, storageState: await context.storageState() });
+  try {
+    await page.getByRole('button', { name: /Shift shop Business workspace/ }).click();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL(/\/local\/signin$/);
+    await expect(other).toHaveURL(/\/local\/signin$/);
+    expect((await (await oldSession.get('/api/identity')).json()).signedIn).toBe(false);
+    expect((await oldSession.get('/api/state')).status()).toBe(401);
+  } finally {
+    await oldSession.dispose();
+  }
+});

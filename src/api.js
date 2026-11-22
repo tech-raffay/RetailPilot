@@ -76,7 +76,7 @@ export async function api(req,env){
   if(req.method==='POST'&&path==='demo')return await start(db,req,b,true);
   if(req.method==='POST'&&path==='onboard')return await start(db,req,b,false);
   let m=await session(req,db);
-  if(path==='identity')return json({signedIn:!!principal(req),email:mail(req),workspaces:principal(req)?(await query(db,'SELECT m.org_id,json_extract(o.document,\'$.name\') as name FROM members m JOIN organizations o ON m.org_id=o.id WHERE principal=?',principal(req)).all()).results:[]});
+  if(path==='identity')return json({localSignOut:env.LOCAL_AUTH===true&&!!principal(req),signedIn:!!principal(req),email:mail(req),workspaces:principal(req)?(await query(db,'SELECT m.org_id,json_extract(o.document,\'$.name\') as name FROM members m JOIN organizations o ON m.org_id=o.id WHERE principal=?',principal(req)).all()).results:[]});
   if(path==='switch'&&req.method==='POST'){
     const member=await query(db,'SELECT * FROM members WHERE org_id=? AND principal=?',String(b.org),principal(req)||'').first()||fail('Workspace not found.',404);
     return await login(db,member,req,false);

@@ -20,6 +20,12 @@ function resetCart(){ctx.cart={};ctx.customer='';ctx.discount=0;ctx.cartKey=cryp
 async function refresh(message){await load();render();if(message)notify(message)}
 function add(id){const p=ctx.s.products.find(p=>p.id===id),q=(ctx.cart[id]||0)+1;if(!p||q>(p.stock[localStore()]||0)){notify('No more units available at this store.');return}ctx.cart[id]=q;ctx.cartKey=crypto.randomUUID();bodyOnly()}
 async function act(action,id=''){
+ if(action==='localSignOut'){
+   const response=await fetch('/local/logout',{method:'POST'});
+   if(!response.ok)throw new Error('Sign out failed. Please try again.');
+   try{localStorage.setItem('retailpilot-signout',crypto.randomUUID())}finally{location.replace('/local/signin')}
+   return;
+ }
  if(action.startsWith('go-'))return go(action.slice(3));
  if(action==='close')return close();
  if(action==='menu')return document.querySelector('.shell').classList.toggle('menu-open');
@@ -55,4 +61,6 @@ document.addEventListener('submit',async e=>{const f=e.target.closest('form[data
 window.addEventListener('popstate',()=>{if(ctx.s){const id=location.hash.slice(1);resetPage(links.some(r=>r[0]===id)&&allowed(id)?id:cashRole()?'pos':'overview');render()}});
 async function boot(){try{try{await load()}catch(e){if(e.status!==401)throw e;const who=await api('identity');if(who.workspaces.length)await api('switch',{org:who.workspaces[0].org_id});else await api('demo',{role:'Owner'});await load()}const target=location.hash.slice(1);resetPage(links.some(r=>r[0]===target)&&allowed(target)?target:cashRole()?'pos':'overview');render();const params=new URLSearchParams(location.search);if(params.has('new'))await showForm('onboardForm');if(params.has('invite')){const token=params.get('invite');modal('Accept team invitation',ctx.signedIn?form('join',field('Your name','name')+'<input type="hidden" name="token" value="'+esc(token)+'">','Join workspace'):'<a class="btn primary" target="_top" href="/signin-with-chatgpt?return_to='+encodeURIComponent(location.pathname+location.search)+'">Sign in to accept</a>')}}
  catch(e){app.innerHTML='<div class="startup"><img src="/mark.svg" width="42" alt=""><b>RetailPilot</b><p>'+esc(e.message)+'</p><button class="btn primary" id="retry">Retry connection</button></div>';document.querySelector('#retry').onclick=boot}}
+window.addEventListener('storage',event=>{if(event.key==='retailpilot-signout')location.replace('/local/signin')});
+window.addEventListener('pageshow',event=>{if(event.persisted)location.reload()});
 boot();
