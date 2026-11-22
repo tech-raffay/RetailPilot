@@ -10,6 +10,7 @@
     "dev": "node --env-file-if-exists=.env.local scripts/dev.mjs",
     "start": "node --env-file-if-exists=.env.local scripts/dev.mjs",
     "build": "node scripts/build.mjs",
+    "backup": "node --env-file-if-exists=.env.local scripts/backup.mjs",
     "test": "node --test scripts/retail.test.mjs",
     "test:e2e": "playwright test"
   },

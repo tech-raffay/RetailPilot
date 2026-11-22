@@ -12,6 +12,12 @@ npm start
 
 Open http://127.0.0.1:4173. Run `npm test` for the acceptance tests or `npm run build` for a single-module Cloudflare Worker build. The local server stores data under `.retailpilot/retail.sqlite`. Set `RETAILPILOT_DATA_DIR` to use a different directory. Stop the process before backing up or restoring the entire data directory. Serve a production installation behind HTTPS and set `RETAILPILOT_HTTPS=1`.
 
+## Back up and restore local records
+
+Run `npm run backup` while the local app is running. It writes a consistent, checked SQLite snapshot under the data directory's `backups` folder. Set `RETAILPILOT_BACKUP_DIR` to save snapshots to another private location. Snapshots include local accounts and shop records. Keep the destination access-controlled.
+
+To restore, create a fresh directory and copy one completed snapshot into it as `retail.sqlite`. Set `RETAILPILOT_DATA_DIR` to that directory and start the app on a free port, for example with `npm start -- --port 4186`. Sign in and verify the workspace before using the restored copy. Keep Stripe settings separately in your local environment.
+
 ## Try the sale and return
 
 To check the register and trial signup in Chromium, run the following from the repository root. The browser suite starts a separate server on port 4174 with a temporary in-memory database. GitHub Actions runs the application tests, Worker build and browser tests on pushes and pull requests.
