@@ -61,6 +61,13 @@ document.addEventListener('submit',async e=>{const f=e.target.closest('form[data
    return;
  }
  if(action==='member')b.remove=b.remove==='on';
+ if(action==='transfer'){
+   await api('transfer',b);
+   if(ctx.store!=='all'&&ctx.store!==b.from&&ctx.store!==b.to)ctx.store=b.from;
+   close();ctx.tab='Movements';ctx.pageNo=0;ctx.q='';
+   await refresh('Stock transferred.');
+   return;
+ }
  if(action==='product'){b.price=Math.round(Number(b.price)*100);b.cost=Math.round(Number(b.cost)*100)}
  if(action==='invite'){const r=await api(action,b);modal(r.sent?'Invitation emailed':'Invitation ready','<p>Share this link with '+esc(b.email)+'.</p><input class="full" readonly value="'+esc(r.link)+'" aria-label="Invitation link">');return}
  const r=await api(action,b);if(action==='onboard'||action==='join'){await load();resetCart();ctx.store='all';go('overview');notify('Workspace ready.');return}

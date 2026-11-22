@@ -11,6 +11,35 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('a stock transfer is atomic, permission-checked and safe to retry',async()=>{
+ const owner=await demo(),cashier=await demo('Cashier'),other=await demo();
+ const request={product:'JKT-001',from:'london',to:'manchester',qty:4,key:'shift-1'};
+ const state=async cookie=>(await call('state',undefined,cookie)).body.workspace;
+ const start=(await state(owner)).products[0].stock;
+ for(const invalid of [{to:'london'},{qty:0},{qty:1.5},{qty:-1},{key:''}]){
+   assert.equal((await call('transfer',{...request,...invalid},owner)).status,400);
+ }
+ assert.equal((await call('transfer',{...request,to:'unknown'},owner)).status,404);
+ assert.equal((await call('transfer',{...request,qty:11},owner)).status,409);
+ assert.equal((await call('transfer',request,cashier)).status,403);
+ assert.equal((await state(owner)).movements.length,0);
+ const retries=await Promise.all([call('transfer',request,owner),call('transfer',request,owner)]);
+ assert.deepEqual(retries.map(r=>r.status),[200,200]);
+ assert.equal(retries[0].body.id,retries[1].body.id);
+ assert.equal((await call('transfer',{...request,qty:1},owner)).status,409);
+ const after=await state(owner);
+ assert.deepEqual(after.products[0].stock,{london:start.london-4,manchester:start.manchester+4});
+ assert.deepEqual(after.movements.map(m=>[m.ref,m.store,m.otherStore,m.delta,m.after]),[
+   ['TR-shift-1','london','manchester',-4,start.london-4],
+   ['TR-shift-1','manchester','london',4,start.manchester+4]
+ ]);
+ assert.deepEqual((await state(other)).products[0].stock,start);
+ const remaining=start.london-4;
+ const contenders=await Promise.all([call('transfer',{...request,key:'last-transfer',qty:remaining},owner),
+   call('checkout',cart('last-sale',remaining),owner)]);
+ assert.deepEqual(contenders.map(r=>r.status).sort(),[200,409]);
+ assert.equal((await state(owner)).products[0].stock.london,0);
+});
 test('CSV preview is read-only and concurrent confirmations create one batch in the selected store',async()=>{
  const cookie=await demo(),other=await demo(),cashier=await demo('Cashier');
  const csv='\uFEFFname,price,sku,category,quantity,barcode,cost\r\n"Coat, ""Blue""",19.95,CSV-1,Coats,4,001234,8.40\r\n"Summer\nShirt",12,CSV-2,Shirts,0,,\r\n';

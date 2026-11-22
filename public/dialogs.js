@@ -8,6 +8,28 @@ export function orderDetail(id){const o=ctx.s.orders.find(x=>x.id===id);if(!o)re
  modal('Order #'+o.id,`<div class="receipt"><div class="receipt-brand"><img src="/mark.svg" width="32" alt=""><h3>${esc(ctx.s.name)}</h3>${badge(o.status)}</div><p>${esc(storeName(o.store))} · ${date(o.date,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</p><dl><dt>Customer</dt><dd>${esc(buyer(o.customer))}</dd><dt>Cashier</dt><dd>${esc(o.operator)}</dd><dt>Payment</dt><dd>${esc(o.method)}</dd></dl>${o.items.map(l=>`<div class="receipt-line"><span>${esc(l.name)}<small>${esc(l.sku)} · ${l.qty} × ${money(l.price)}</small></span><b>${money(l.price*l.qty)}</b></div>`).join('')}<dl>${o.discount?`<dt>Discount</dt><dd>${o.discount}%</dd>`:''}<dt>VAT</dt><dd>${money(o.tax)}</dd><dt class="total">Total</dt><dd class="total">${money(o.total)}</dd>${o.method==='Cash'&&o.received!=null?`<dt>Cash received</dt><dd>${money(o.received)}</dd><dt>Change</dt><dd>${money(o.received-o.total)}</dd>`:''}</dl>${o.refund?desc('Return reason: '+o.refund.reason):''}</div><div class="form-foot">${o.status==='Paid'?btn('Return order','refundForm','','secondary',`data-id="${esc(id)}"`):''}${(o.status==='Pending'&&o.method==='Stripe'?btn('Resume checkout','resumePay','card','primary',`data-id="${esc(id)}"`):'')+btn('Print receipt','print','print','primary')}</div>`)}
 export function showForm(act,id=''){
  const p=ctx.s.products.find(x=>x.id===id),s=ctx.s;
+ if(act==='transferForm'){
+   if(cashRole()||s.stores.length<2||!s.products.length)return;
+   const source=localStore(),destination=s.stores.find(store=>store.id!==source);
+   const fields=selectField('Product variant','product',variants())+
+     selectField('From store','from',shops(),source)+selectField('To store','to',shops(),destination.id)+
+     field('Units to transfer','qty','number',1,'required min="1" step="1" aria-describedby="transfer-stock"')+
+     '<p id="transfer-stock" aria-live="polite"></p><input type="hidden" name="key" value="'+crypto.randomUUID()+'">';
+   modal('Transfer stock',form('transfer',fields,'Confirm transfer'));
+   const transfer=document.querySelector('form[data-form="transfer"]');
+   function updateStock(){
+     const {product,from,to,qty}=transfer.elements;
+     for(const option of to.options)option.disabled=option.value===from.value;
+     if(to.value===from.value)to.value=s.stores.find(store=>store.id!==from.value).id;
+     const available=s.products.find(item=>item.id===product.value).stock[from.value]||0;
+     qty.max=Math.min(available,999999);
+     transfer.querySelector('#transfer-stock').textContent=available+' units available at '+storeName(from.value)+'.';
+     transfer.querySelector('[type="submit"]').disabled=available===0;
+   }
+   transfer.addEventListener('change',updateStock);
+   updateStock();
+   return;
+ }
  if(act==='order')return orderDetail(id);
  if(act==='showProduct'&&p)return modal(p.name,`<div class="detail-product">${photo(p,'detail-photo')}<div><span class="muted">${esc(p.category)}</span><h3>${money(p.price)}</h3><p>${esc(p.color)} · ${esc(p.size)}</p><small>${esc(p.sku)}</small></div></div><dl>${s.stores.map(st=>`<dt>${esc(st.name)}</dt><dd>${p.stock[st.id]||0} in stock</dd>`).join('')}</dl><div class="form-foot">${cashRole()?'':btn('Edit product','productForm','edit','secondary',`data-id="${esc(id)}"`)}${btn('Add to sale','addFromProduct','cart','primary',`data-id="${esc(id)}"`)}</div>`);
  if(act==='productForm')return modal(p?'Edit product':'Add product',form('product',`<input type="hidden" name="id" value="${esc(p?.id)}">${field('Product name','name','text',p?.name)}<div class="form-grid">${field('SKU','sku','text',p?.sku)}${field('Barcode','barcode','text',p?.barcode,'')}${field('Category','category','text',p?.category)}${field('Colour','color','text',p?.color,'')}${field('Size','size','text',p?.size,'')}${field('VAT (%)','tax','number',p?.tax??s.vat,'required min="0" max="100"')}${field('Retail price (£)','price','number',(p?.price||0)/100,'required min="0" step=".01"')}${field('Unit cost (£)','cost','number',(p?.cost||0)/100,'required min="0" step=".01"')}${field('Low-stock threshold','threshold','number',p?.threshold??5,'required min="0"')}${p?'':field('Opening quantity','quantity','number',0,'required min="0"')}</div>${p?'':selectField('Opening stock location','store',shops(),localStore())}${field('Product image URL','imageUrl','url',p?.imageUrl,'placeholder="https://…"') }`,'Save product'),true);

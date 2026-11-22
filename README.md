@@ -42,6 +42,10 @@ npm run test:e2e
 
 A demo card can return an approval or a decline. Neither action moves money. Seeded historical card orders represent sample transactions. Refunds are full-order refunds.
 
+## Stock transfers
+
+In a workspace with at least two stores, owners and managers can open Inventory, select **Transfer stock**, choose a variant and move available units to another store. Confirmation deducts and receives stock immediately. The Movements tab shows both entries with the same searchable transfer reference.
+
 ## Catalog CSV import
 
 In Products, an owner or manager can choose **Import CSV**, download the sample, select the store for opening stock and preview a UTF-8 comma-separated file. Confirm to add all valid rows together. Existing products can be edited in Products. Re-uploading the same file for the same store reports the completed import. A different file containing an existing SKU or barcode shows a conflict.

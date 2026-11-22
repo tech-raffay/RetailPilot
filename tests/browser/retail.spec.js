@@ -1,5 +1,29 @@
 import { test, expect } from '@playwright/test';
 
+test('transfer updates both stores and links their movements',async({page})=>{
+  await page.goto('/#inventory');
+  await page.getByRole('button',{name:'Transfer stock'}).click();
+  await page.getByLabel('Product variant').selectOption('JKT-001');
+  await page.getByLabel('From store').selectOption('manchester');
+  await expect(page.getByLabel('To store')).toHaveValue('london');
+  await page.getByLabel('From store').selectOption('london');
+  await expect(page.getByLabel('To store')).toHaveValue('manchester');
+  await expect(page.getByText('10 units available at London.')).toBeVisible();
+  await page.getByLabel('Units to transfer').fill('3');
+  await page.getByRole('button',{name:'Confirm transfer'}).click();
+  const outgoing=page.getByRole('row').filter({hasText:'Transfer out'});
+  const incoming=page.getByRole('row').filter({hasText:'Transfer in'});
+  await expect(outgoing.getByRole('cell').nth(2)).toHaveText('-3');
+  await expect(incoming.getByRole('cell').nth(2)).toHaveText('+3');
+  const ref=await outgoing.getByRole('cell').nth(4).innerText();
+  expect(ref).toMatch(/^TR-/);
+  await expect(incoming.getByRole('cell').nth(4)).toHaveText(ref);
+  await page.getByRole('button',{name:'Stock levels'}).click();
+  await page.getByLabel('Search inventory').fill('JKT-001');
+  await expect(page.getByRole('row').filter({hasText:'London'}).getByRole('cell').nth(2)).toHaveText('7');
+  await expect(page.getByRole('row').filter({hasText:'Manchester'}).getByRole('cell').nth(2)).toHaveText('6');
+});
+
 test('catalog CSV template previews, imports and opens stock once', async ({page}) => {
   await page.goto('/#products');
   const open = page.getByRole('button',{name:'Import CSV'});

@@ -9,7 +9,9 @@ function productFor(s,id){return s.products.find(p=>p.id===id)||fail('Product no
 function movement(s,p,store,delta,reason,actor,ref){
   const after=(p.stock[store]||0)+delta;
   if(after<0)fail('Insufficient stock for '+p.name+'.',409);
-  p.stock[store]=after;s.movements.push({id:uid(),date:Date.now(),product:p.id,name:p.name,store,delta,after,reason,actor,ref});
+  const record={id:uid(),date:Date.now(),product:p.id,name:p.name,store,delta,after,reason,actor,ref};
+  p.stock[store]=after;s.movements.push(record);
+  return record;
 }
 export function checkout(s,b,member){
   const known=s.orders.find(o=>o.key===b.key);if(known)return known;
@@ -45,6 +47,25 @@ export function change(s,action,b,m){
   let out;
   if(action==='checkout')out=checkout(s,b,m);
   else if(action==='refund')out=refund(s,{...b,providerVerified:false},m);
+  else if(action==='transfer'){
+    const p=productFor(s,b.product);
+    const source=storeFor(s,b.from),destination=storeFor(s,b.to);
+    if(source.id===destination.id)fail('Choose two different stores.');
+    if(!['number','string'].includes(typeof b.qty))fail('Enter a whole number of units.');
+    const qty=num(b.qty,1,999999);
+    if(typeof b.key!=='string'||!/^[a-zA-Z0-9-]{1,64}$/.test(b.key))fail('Invalid transfer reference.');
+    const ref='TR-'+b.key;
+    const previous=s.movements.find(row=>row.ref===ref&&row.reason==='Transfer out');
+    if(previous){
+      if(previous.store!==source.id||previous.product!==p.id||previous.delta!==-qty||previous.otherStore!==destination.id){
+        fail('This reference was already used for another transfer.',409);
+      }
+      return {id:ref};
+    }
+    movement(s,p,source.id,-qty,'Transfer out',m.name,ref).otherStore=destination.id;
+    movement(s,p,destination.id,qty,'Transfer in',m.name,ref).otherStore=source.id;
+    out={id:ref};
+  }
   else if(action==='adjust'){
     const p=productFor(s,b.product);storeFor(s,b.store);const delta=num(b.delta,-99999,99999);
     if(!delta)fail('Enter a non-zero adjustment.');movement(s,p,b.store,delta,required(b.reason,'an adjustment reason'),m.name,'');out=p;
