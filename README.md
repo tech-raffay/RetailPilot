@@ -18,6 +18,12 @@ Run `npm run backup` while the local app is running. It writes a consistent, che
 
 To restore, create a fresh directory and copy one completed snapshot into it as `retail.sqlite`. Set `RETAILPILOT_DATA_DIR` to that directory and start the app on a free port, for example with `npm start -- --port 4186`. Sign in and verify the workspace before using the restored copy. Keep Stripe settings separately in your local environment.
 
+## Payment monitoring and hosted recovery
+
+Run `npm run monitor:payments` to check local pending Stripe orders against the assigned sandbox merchant's Checkout Sessions. Each alert includes the order ID and session ID. Exit status 0 means the scan completed without alerts, 2 means it found a mismatch, and 1 means it could not complete verification. Use `npm run monitor:payments -- --watch` to repeat every minute while the process is running. Investigate the matching webhook delivery before retrying a payment or changing any stock.
+
+To rehearse recovery from a full Cloudflare D1 SQL export, keep the export outside the repository and run `python scripts/check-d1-export.py PATH_TO_EXPORT.sql`. The script imports the SQL into a fresh in-memory SQLite database, checks the schema and integrity, and prints the workspace revisions, order counts and fingerprints of orders and per-variant stock. Pass `--baseline PATH_TO_SUMMARY.json` to compare with independently recorded values for the same source revision. This local rehearsal covers the logical export. Cloudflare Time Travel recovery requires access to the hosted database's management controls.
+
 ## Try the sale and return
 
 To check the register and trial signup in Chromium, run the following from the repository root. The browser suite starts a separate server on port 4174 with a temporary in-memory database. GitHub Actions runs the application tests, Worker build and browser tests on pushes and pull requests.
