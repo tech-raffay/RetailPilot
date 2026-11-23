@@ -55,7 +55,83 @@ async function start(db,req,b,demo){
 async function members(db,id){return (await query(db,'SELECT principal,name,email,role FROM members WHERE org_id=? ORDER BY rowid',id).all()).results}
 async function retailCheckoutUrl(env,origin,id,order,account){
  const fields={mode:'payment','line_items[0][price_data][currency]':'gbp','line_items[0][price_data][product_data][name]':order.id,'line_items[0][price_data][unit_amount]':String(order.total),'line_items[0][quantity]':'1','metadata[org]':id,'metadata[order]':order.id,'metadata[flow]':'retail',success_url:origin+'/#orders',cancel_url:origin+'/#orders'};
- return stripe(env,'checkout/sessions',fields,id+order.id,account);
+ if(order.pickup){
+   fields.success_url=fields.cancel_url=origin+'/shop.html?shop='+id+'#'+order.key.slice('pickup:'.length);
+   fields['payment_method_types[0]']='card';
+ }
+ return stripe(env,'checkout/sessions',fields,id+order.id,order.pickup?.account||account);
+}
+function readOnlyBusiness(s){
+  return !s.demo&&((s.billing==='trial'&&s.trialEnd<Date.now())||(['past_due','canceled','unpaid'].includes(s.billing)&&s.graceEnd<Date.now()));
+}
+function cancelReservation(s,order,reason){
+  if(order.status!=='Pending')return;
+  order.status='Cancelled';
+  for(const item of order.items){
+    const p=s.products.find(p=>p.id===item.id);
+    p.stock[order.store]+=item.qty;
+    s.movements.push({id:uid(),date:Date.now(),name:p.name,product:p.id,store:order.store,delta:item.qty,after:p.stock[order.store],reason,ref:order.id,actor:'Stripe'});
+  }
+}
+function publicPickup(order){
+  return {id:order.id,status:order.status,total:order.total,location:order.pickup.location,address:order.pickup.address,
+    collected:!!order.pickup.collectedAt,...(order.status==='Paid'?{code:order.pickup.code}:{})};
+}
+async function storefront(req,env,u,id,action,b){
+  const db=env.DB;
+  const shop=JSON.parse((await doc(db,id)).document);
+  const available=s=>s.storefront?.enabled&&!readOnlyBusiness(s)&&(!s.demo||s.storefront.expires>Date.now());
+  if(!action&&req.method==='GET'){
+    if(!available(shop))fail('This storefront is closed.',404);
+    const store=shop.stores.find(s=>s.id===shop.storefront.store);
+    return json({name:shop.name,store:{id:store.id,name:store.name,address:store.address},demo:shop.demo,
+      checkoutEnabled:shop.demo||!!(stripeReady(env)&&shop.stripeAccount),inclusive:shop.inclusive,
+      products:shop.products.map(p=>({id:p.id,name:p.name,sku:p.sku,size:p.size,color:p.color,category:p.category,
+        price:p.price,tax:p.tax??shop.vat,stock:p.stock[store.id]??0,image:p.photo?'/images/'+p.photo+'.webp':p.imageUrl||''}))});
+  }
+  if(req.method!=='POST'||!['checkout','status'].includes(action))fail('Route not found.',404);
+  if(typeof b.key!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(b.key))fail('Invalid checkout reference.');
+  const key='pickup:'+b.key;
+  const findOrder=s=>s.orders.find(o=>o.key===key&&o.pickup);
+  let order=findOrder(shop);
+  if(action==='status'){
+    if(!order)fail('Pickup order not found.',404);
+    return json(publicPickup(order));
+  }
+  if(!order){
+    order=await write(db,id,s=>{
+      const prior=findOrder(s);if(prior)return prior;
+      if(!available(s))fail('This storefront is closed.',404);
+      if(s.storefront.store!==b.store)fail('Pickup location changed. Reload the catalog.',409);
+      if(!s.demo&&!(stripeReady(env)&&s.stripeAccount))fail('Online payment is unavailable.',503);
+      if(s.orders.some(o=>o.key===key))fail('Checkout reference unavailable.',409);
+      if(!Array.isArray(b.items)||b.items.some(i=>!i||typeof i.id!=='string'||!Number.isSafeInteger(i.qty)))fail('Invalid basket contents.');
+      const o=change(s,'checkout',{key,store:b.store,items:b.items,method:s.demo?'Demo card':'Stripe'},{role:'Cashier',name:'Online storefront'});
+      if(o.total!==b.total||o.total<=0)fail('The order total changed. Review the catalog.',409);
+      const store=s.stores.find(st=>st.id===o.store);
+      o.channel='Click & collect';
+      o.pickup={code:uid().slice(0,8).toUpperCase(),location:store.name,address:store.address,account:s.stripeAccount};
+      return o;
+    },env);
+  }
+  if(order.status!=='Pending')return json(publicPickup(order));
+  if(Date.now()-order.date>=24*3600000)fail('Payment session has ended. Check the order status.',409);
+  if(order.pickup.checkoutUrl)return json({...publicPickup(order),url:order.pickup.checkoutUrl});
+  let session;
+  try{session=await retailCheckoutUrl(env,u.origin,id,order,order.pickup.account);}
+  catch(error){
+    if(error.providerRejected)await write(db,id,s=>{
+      const pending=findOrder(s);
+      if(!pending.pickup.checkoutUrl)cancelReservation(s,pending,'Checkout unavailable');
+    });
+    throw error;
+  }
+  return json(await write(db,id,s=>{
+    const saved=findOrder(s);
+    if(saved.status!=='Pending')return publicPickup(saved);
+    saved.pickup.checkoutUrl=session.url;
+    return {...publicPickup(saved),url:session.url};
+  }));
 }
 async function webhook(req,env){
   const raw=await req.text(),signature=req.headers.get('Stripe-Signature');
@@ -66,10 +142,11 @@ async function webhook(req,env){
   await write(env.DB,id,(s,jobs)=>{
     if(s.events.includes(event.id))return;
     if(meta.flow==='retail'){
-      if(!s.stripeAccount||event.account!==s.stripeAccount)fail('Merchant mismatch.');
       const order=s.orders.find(x=>x.id===meta.order)||fail('Unknown order.');
+      const merchant=order.pickup?.account||s.stripeAccount;
+      if(!merchant||event.account!==merchant)fail('Merchant mismatch.');
       if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&o.amount_total===order.total&&o.currency==='gbp'&&order.status==='Pending'){order.status='Paid';order.intent=o.payment_intent;jobs.push(receiptMessage(s,order))}
-      if(event.type==='checkout.session.expired'&&order.status==='Pending'){order.status='Cancelled';for(const l of order.items){const p=s.products.find(p=>p.id===l.id);p.stock[order.store]+=l.qty;s.movements.push({id:uid(),date:Date.now(),name:p.name,product:p.id,store:order.store,delta:l.qty,after:p.stock[order.store],reason:'Expired checkout',ref:order.id,actor:'Stripe'})}}
+      if(event.type==='checkout.session.expired')cancelReservation(s,order,'Expired checkout');
     }else if(meta.flow==='billing'&&!event.account){
       if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&plans[meta.plan]){s.plan=meta.plan;s.billing='active';s.stripeCustomer=o.customer;s.subscription=o.subscription}
       if(event.type.startsWith('customer.subscription.')&&o.id===s.subscription){const subPlan=Object.keys(plans).find(p=>env['STRIPE_PRICE_'+p.toUpperCase()]===o.items?.data?.[0]?.price?.id&&o.items?.data?.[0]?.price?.id);if(subPlan)s.plan=subPlan;s.billing=o.status;s.graceEnd=s.graceEnd||Date.now()+3*86400000;if(o.status==='active')s.graceEnd=null}
@@ -84,6 +161,8 @@ export async function api(req,env){
   if(path==='stripe/webhook'&&req.method==='POST')return await webhook(req,env);
   if(req.method==='POST'&&req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)fail('Invalid request origin.',403);
   const b=req.method==='POST'?await req.json():{};
+  const shopRoute=path.match(/^shop\/([a-f0-9-]{36})(?:\/(checkout|status))?$/);
+  if(shopRoute)return await storefront(req,env,u,shopRoute[1],shopRoute[2],b);
   if(req.method==='POST'&&path==='demo')return await start(db,req,b,true);
   if(req.method==='POST'&&path==='onboard')return await start(db,req,b,false);
   let m=await session(req,db);
@@ -132,9 +211,17 @@ export async function api(req,env){
   if(path==='state'&&req.method==='GET'){
     const s=JSON.parse((await doc(db,id)).document);
     s.loyaltyEnabled=s.loyaltyEnabled??s.demo;
+    if(m.role==='Owner')s.storefrontUrl='/shop.html?shop='+id;
     s.loyaltyReward=loyaltyReward;
     const balances=loyaltyBalances(s.orders);
     for(const customer of s.customers)customer.availablePoints=balances.get(customer.id)??0;
+    for(const o of s.orders){
+      if(!o.pickup)continue;
+      delete o.key;
+      delete o.pickup.code;
+      delete o.pickup.account;
+      delete o.pickup.checkoutUrl;
+    }
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
     delete s.events;delete s.audit;delete s.catalogImports;
     return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),localAuth:env.LOCAL_AUTH===true,emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
@@ -143,7 +230,7 @@ export async function api(req,env){
   if(path==='logout'){const t=(req.headers.get('Cookie')||'').match(/rp_session=([a-f0-9-]+)/)?.[1];if(t)await query(db,'DELETE FROM sessions WHERE token=?',await hash(t)).run();return json({ok:true},200,{'Set-Cookie':'rp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'})}
   const current=JSON.parse((await doc(db,id)).document);
   if(path==='checkout'&&b.emailReceipt===true&&!mailReady(env)&&!current.orders.some(o=>o.key===b.key))fail('Email receipts are unavailable. Clear the receipt option to continue.',503);
-  if(!current.demo&&!['stripe/billing','stripe/portal'].includes(path)&&((current.billing==='trial'&&current.trialEnd<Date.now())||(['past_due','canceled','unpaid'].includes(current.billing)&&current.graceEnd<Date.now())))fail('Your workspace is read-only. Update billing to continue.',403);
+  if(readOnlyBusiness(current)&&!['stripe/billing','stripe/portal'].includes(path))fail('Your workspace is read-only. Update billing to continue.',403);
   if(path==='products/import/preview'||path==='products/import'){
     permit(m.role,['Owner','Manager']);
     if(typeof b.csv!=='string'||b.csv.length>262144||typeof b.store!=='string')fail('Choose a store and a CSV file up to 256 KiB.');
@@ -189,6 +276,7 @@ export async function api(req,env){
   }
   if(path==='payment/resume'){
     const order=current.orders.find(o=>o.id===b.id)||fail('Order not found.',404);
+    if(order.pickup)fail('Resume online payment from the shopper’s order page.',409);
     if(order.status!=='Pending'||order.method!=='Stripe')fail('This order is not awaiting payment.');
     const session=await retailCheckoutUrl(env,u.origin,id,order,current.stripeAccount);return json({url:session.url});
   }
@@ -209,7 +297,7 @@ export async function api(req,env){
   if(path==='refund'&&current.orders.find(x=>x.id===b.id)?.method==='Stripe'){
     const o=current.orders.find(x=>x.id===b.id);if(o.status==='Refunded')return json(o);if(o.status!=='Paid'||!o.intent)fail('Payment is not confirmed.');
     if(m.role==='Cashier'&&o.total>10000)fail('Manager approval required.',403);required(b.reason,'a return reason');
-    const res=await stripe(env,'refunds',{payment_intent:o.intent},id+o.id+'refund',current.stripeAccount);
+    const res=await stripe(env,'refunds',{payment_intent:o.intent},id+o.id+'refund',o.pickup?.account||current.stripeAccount);
     if(res.status!=='succeeded')fail('The refund is awaiting provider confirmation.',409);
     return json(await write(db,id,s=>refund(s,{...b,providerVerified:true},m)));
   }

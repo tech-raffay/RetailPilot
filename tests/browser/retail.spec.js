@@ -193,6 +193,34 @@ test('cashier applies an earned loyalty reward to the next sale',async({page})=>
   await expect(page.getByRole('dialog')).toContainText('Available loyalty points72');
 });
 
+test('a guest shops on mobile and staff confirm pickup with the buyer code',async({page,browser})=>{
+  await page.goto('/#settings');
+  await page.getByRole('button',{name:'Edit storefront'}).click();
+  await page.getByLabel('Open storefront to shoppers').check();
+  await page.getByRole('button',{name:'Save storefront'}).click();
+  const url=await page.getByRole('link',{name:'Open storefront'}).getAttribute('href');
+  const guest=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:375,height:812}});
+  try{
+    const shopper=await guest.newPage();await shopper.goto(url);
+    await shopper.getByRole('searchbox').fill('JKT-001');
+    await shopper.getByRole('button',{name:'Add to basket'}).click();
+    await shopper.getByRole('button',{name:'Place demo order'}).click();
+    await expect(shopper.getByRole('heading',{name:'Payment confirmed'})).toBeVisible();
+    const code=await shopper.locator('.code').innerText();
+    const id=(await shopper.locator('#confirmation').innerText()).match(/ORD-\d+/)[0];
+    expect(await shopper.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.reload();await page.getByRole('link',{name:'Orders',exact:true}).click();
+    await page.getByLabel('Search order or customer').fill(id);
+    await page.getByRole('row').filter({hasText:id}).click();
+    await page.getByRole('button',{name:'Collect order'}).click();
+    await page.getByLabel('Customer pickup code').fill(code);
+    await page.getByRole('button',{name:'Confirm collection'}).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await shopper.reload();
+    await expect(shopper.getByRole('heading',{name:'Order collected'})).toBeVisible();
+  }finally{await guest.close()}
+});
+
 test('owner edits customer contact details and withdraws marketing consent',async({page})=>{
   await page.goto('/#customers');
   await page.getByRole('row').filter({hasText:'Amelia Brooks'}).click();

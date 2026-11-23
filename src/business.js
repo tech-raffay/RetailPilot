@@ -69,7 +69,7 @@ export function refund(s,b,member){
   return o;
 }
 export function change(s,action,b,m){
-  if(!['checkout','refund','customer'].includes(action))permit(m.role,['Owner','Manager']);
+  if(!['checkout','refund','customer','pickup/collect'].includes(action))permit(m.role,['Owner','Manager']);
   let out;
   if(action==='checkout')out=checkout(s,b,m);
   else if(action==='refund')out=refund(s,{...b,providerVerified:false},m);
@@ -133,6 +133,20 @@ export function change(s,action,b,m){
   }else if(action==='store'){
     permit(m.role,['Owner']);if(s.stores.length>=plans[s.plan].stores)fail('Upgrade your plan to add another store.',403);
     out={id:uid(),name:required(b.name,'a store name'),address:str(b.address)};s.stores.push(out);
+  }else if(action==='storefront/settings'){
+    permit(m.role,['Owner']);
+    if(typeof b.enabled!=='boolean')fail('Choose a storefront status.');
+    const store=storeFor(s,b.store);
+    s.storefront={enabled:b.enabled,store:store.id};
+    if(s.demo)s.storefront.expires=(Math.floor(Date.now()/86400000)+1)*86400000;
+    out=s.storefront;
+  }else if(action==='pickup/collect'){
+    const order=s.orders.find(o=>o.id===b.id&&o.pickup);
+    if(!order)fail('Pickup order not found.',404);
+    if(order.status!=='Paid')fail('Payment must be confirmed before collection.',409);
+    if(str(b.code).toUpperCase()!==order.pickup.code)fail('The pickup code does not match.');
+    order.pickup.collectedAt??=Date.now();
+    out={id:order.id};
   }else if(action==='loyalty/settings'){
     permit(m.role,['Owner']);
     if(typeof b.enabled!=='boolean')fail('Choose a loyalty program status.');

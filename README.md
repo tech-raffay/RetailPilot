@@ -50,6 +50,12 @@ A demo card can return an approval or a decline. Neither action moves money. See
 
 Owners and managers can open **Reports**, select a store and choose the last 7, 30 or 90 days. **Print / Save PDF** opens the browser print dialog. Choose **Save as PDF** to save the totals and product table with the workspace, store and UTC date range. **Export CSV** downloads the product rows.
 
+## Online pickup storefront
+
+In **Settings → Edit storefront**, the owner selects a pickup location and enables the shop. **Open storefront** gives the shopper link. The catalog shows variants, prices and stock at that location. Guest checkout shares inventory with POS. Demo shops simulate payment and expire at UTC midnight. Business shops use their connected Stripe test merchant. A closed shop stops accepting new orders.
+
+The shopper can bookmark the order page to check payment status and retrieve the pickup code. Staff open the order and choose **Collect order** to confirm handover with that code. A signed Stripe payment event confirms the order, and checkout expiry releases reserved stock. The pilot supports pickup at one selected location per shop.
+
 ## Stock transfers
 
 Run `npm run check:stock` to check local business workspaces. It replays stock movements for each variant and store, compares each recorded balance with the running total, checks both sides of transfers, and compares the result with current inventory. Demo workspaces have preloaded stock and are skipped. The check opens SQLite read-only. Exit code 0 means the scan finished without alerts, 2 identifies discrepancies, and 1 means the scan was incomplete. The output identifies the workspace revision and affected records for investigation.
@@ -104,4 +110,4 @@ On 23 November 2026, a £1.00 GBP card sale through hosted Stripe Checkout was v
 
 Catalog and variants, barcode lookup, store inventory, adjustments, low-stock alerts, POS discounts and configurable VAT, cash and test-card checkout, printed receipts, orders and full returns, store-specific dashboard periods, reports and CSV exports, customer history, suppliers and purchase-order receiving, role-based staff invitations, subscription limits and workspace settings.
 
-The online storefront, WhatsApp delivery, offline queue, AI forecasts, platform super-admin, custom domains, and production monitoring are later milestones.
+WhatsApp delivery, offline queue, AI forecasts, platform super-admin, custom domains, and production monitoring are later milestones.

@@ -1,0 +1,21 @@
+:root {color:#172624;background:#f7f7f2;font:16px Inter,system-ui,sans-serif}
+* {box-sizing:border-box} body {margin:0} [hidden],#notice:empty {display:none}
+header,main {max-width:1360px;margin:auto;padding:22px clamp(16px,4vw,64px)}
+header {display:flex;align-items:center;gap:.65rem;border-bottom:1px solid #cdd4ca}
+#basket-link {margin-left:auto;color:#224d3d;font-weight:600}
+h1,h2,h3,p {margin:0} h1 {font:clamp(2.7rem,6vw,5.5rem)/1 Georgia,serif;letter-spacing:-.055em}
+h2 {font-size:1.3rem} h3 {font-size:1rem} #location,#notice {margin:.75rem 0;color:#46594f;line-height:1.5}
+.layout {display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,310px);gap:clamp(22px,3vw,48px);margin:2rem 0}
+#search,select,button {font:inherit;border:1px solid #a5b3a7;border-radius:6px;padding:.55rem .7rem;color:inherit;background:white}
+#search {width:100%;margin-bottom:1.2rem} #catalog {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:1.6rem 1rem}
+article {min-width:0;display:flex;flex-direction:column;gap:.65rem} article img,.no-photo {width:100%;aspect-ratio:4/3;object-fit:cover;background:#e5e8df;border-radius:8px}
+.no-photo {display:grid;place-items:center;color:#4d6054} article select {max-width:100%}
+button {cursor:pointer;font-weight:600} button.primary {background:#224d3d;color:white;border-color:#224d3d}
+button:disabled {opacity:.55;cursor:default} :focus-visible {outline:3px solid #477dc0;outline-offset:2px}
+aside,#confirmation {background:white;border:1px solid #d6ddd2;border-radius:12px;padding:1.25rem;align-self:start}
+#confirmation {max-width:580px;margin:3rem auto} #confirmation>*+*,#basket>*+* {margin-top:.9rem}
+.item {border-bottom:1px solid #e1e4da;padding:.7rem 0;overflow-wrap:anywhere}
+.row {display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.controls {display:flex;align-items:center;gap:.6rem;margin-top:.4rem}
+.muted {font-size:.9rem;color:#526257} aside .primary {width:100%} .code {font: bold 1.5rem monospace}
+@media(max-width:760px){.layout {grid-template-columns:1fr} #catalog {grid-template-columns:repeat(2,minmax(0,1fr))} header,main {padding:16px} article select {width:100%}}

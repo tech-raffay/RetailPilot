@@ -16,6 +16,75 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('storefront limits public data and shares inventory with the register',async()=>{
+ const owner=await demo();
+ const state=async()=>(await call('state',undefined,owner)).body.workspace;
+ const shopPath='shop/'+new URL((await state()).storefrontUrl,'https://retail.test').searchParams.get('shop');
+ const configure=enabled=>call('storefront/settings',{enabled,store:'london'},owner);
+ assert.equal((await call(shopPath)).status,404);
+ assert.equal((await call('storefront/settings',{enabled:true,store:'london'},await demo('Cashier'))).status,403);
+ await configure(true);
+ const catalog=(await call(shopPath)).body;
+ assert.equal(catalog.name,'Northline Outfitters');
+ assert.equal(catalog.customers,undefined);assert.equal(catalog.products[0].cost,undefined);
+ const key=crypto.randomUUID();
+ const checkout={key,store:'london',items:[{id:'JKT-001',qty:1}],total:5999,discount:99,method:'Cash'};
+ assert.equal((await call(shopPath+'/checkout',{...checkout,total:1})).status,409);
+ assert.equal((await state()).products[0].stock.london,10);
+ const [first,repeat]=await Promise.all([call(shopPath+'/checkout',checkout),call(shopPath+'/checkout',checkout)]);
+ assert.deepEqual(first.body,repeat.body);
+ assert.equal(first.body.status,'Paid');
+ assert.equal((await state()).products[0].stock.london,9);
+ const staffOrder=(await state()).orders.find(o=>o.id===first.body.id);
+ assert.equal(staffOrder.channel,'Click & collect');
+ assert.equal(staffOrder.pickup.code,undefined);
+ assert.equal(staffOrder.key,undefined);
+ assert.equal((await call(shopPath+'/status',{key:crypto.randomUUID()})).status,404);
+ await configure(false);
+ assert.equal((await call(shopPath)).status,404);
+ assert.equal((await call(shopPath+'/status',{key})).body.code,first.body.code);
+ assert.equal((await call('pickup/collect',{id:first.body.id,code:'wrong'},owner)).status,400);
+ assert.equal((await call('pickup/collect',{id:first.body.id,code:first.body.code},owner)).status,200);
+ assert.equal((await call(shopPath+'/status',{key})).body.collected,true);
+ await configure(true);
+ await call('adjust',{product:'JKT-001',store:'london',delta:-8,reason:'Count'},owner);
+ const results=await Promise.all([call(shopPath+'/checkout',{...checkout,key:crypto.randomUUID()}),call('checkout',cart('last-pos',1),owner)]);
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ assert.equal((await state()).products[0].stock.london,0);
+});
+test('storefront checkout uses the merchant and releases stock after a definitive session rejection',async t=>{
+ const person='online-owner',env={STRIPE_TEST_KEY:'sk_test_fixture',STRIPE_WEBHOOK_SECRET:'fixture'};
+ const owner=(await call('onboard',{name:'Online shop',store:'London',owner:'Owner'},'',person)).cookie;
+ const post=(path,data)=>call(path,data,owner,person,'',env);
+ const org=(await post('identity',undefined)).body.workspaces[0].org_id;
+ env.STRIPE_ACCOUNTS=org+'=acct_pickup';
+ await post('storefront/settings',{enabled:true,store:'london'});
+ const p=(await post('product',{sku:'ON',name:'Online item',category:'Test',price:500,cost:100,threshold:0,quantity:2,store:'london'})).body;
+ const path='shop/'+org,guest=(action,data)=>call(path+'/'+action,data,'','','',env);
+ const payload={key:crypto.randomUUID(),store:'london',total:500,items:[{id:p.id,qty:1}]};
+ assert.equal((await guest('checkout',payload)).status,503);
+ await post('stripe/account',{account:'acct_pickup'});
+ let reject=true;
+ t.mock.method(globalThis,'fetch',async(url,{headers,body})=>{
+   assert.equal(headers['Stripe-Account'],'acct_pickup');
+   assert.ok(body.get('success_url').includes('/shop.html?shop='+org+'#'));
+   return reject?Response.json({error:{type:'invalid_request_error'}},{status:400}):Response.json({url:'https://checkout.example.test/test'});
+ });
+ assert.equal((await guest('checkout',payload)).status,502);
+ assert.equal((await guest('status',payload)).body.status,'Cancelled');
+ assert.equal((await call(path)).body.products[0].stock,2);
+ reject=false;payload.key=crypto.randomUUID();
+ const pending=await guest('checkout',payload);
+ assert.equal(pending.body.status,'Pending');assert.equal(pending.body.code,undefined);
+ reject=true;
+ assert.equal((await guest('checkout',{key:payload.key})).body.url,pending.body.url);
+ const raw=JSON.stringify({id:'evt_pickup',type:'checkout.session.completed',account:'acct_pickup',livemode:false,data:{object:{
+   metadata:{org,flow:'retail',order:pending.body.id},currency:'gbp',amount_total:500,payment_status:'paid',payment_intent:'pi_pickup'}}});
+ const time=Math.floor(Date.now()/1000),sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
+ assert.equal((await api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',body:raw,headers:{'Stripe-Signature':'t='+time+',v1='+sig}}),{DB,...env})).status,200);
+ assert.match((await guest('status',payload)).body.code,/^[A-F0-9]{8}$/);
+ assert.equal((await call(path)).body.products[0].stock,1);
+});
 test('loyalty rewards cannot be spent twice and returns reverse both sides of a sale',async()=>{
  const owner=await demo();
  const post=(path,data)=>call(path,data,owner);

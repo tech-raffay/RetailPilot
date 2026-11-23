@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Shop for pickup · RetailPilot</title>
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/shop.css">
+</head>
+<body>
+  <header><img src="/mark.svg" width="30" height="30" alt=""><strong id="brand">RetailPilot</strong><a id="basket-link" href="#basket-panel" hidden>View basket</a></header>
+  <main>
+    <p id="notice" role="status" aria-live="polite">Opening shop…</p>
+    <section id="confirmation" hidden></section>
+    <div id="storefront" hidden>
+      <h1>Shop for pickup</h1><p id="location"></p>
+      <div class="layout">
+        <section aria-label="Products">
+          <input id="search" type="search" aria-label="Search products" placeholder="Search name, category or SKU">
+          <div id="catalog"></div>
+        </section>
+        <aside id="basket-panel" tabindex="-1"><h2>Your basket</h2><div id="basket"></div></aside>
+      </div>
+    </div>
+  </main>
+  <script type="module" src="/shop.js"></script>
+</body>
+</html>
