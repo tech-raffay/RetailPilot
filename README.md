@@ -94,6 +94,8 @@ For a merchant direct charge, assign the connected test account in STRIPE_ACCOUN
 
 Retail uses Stripe Checkout Sessions with a Stripe-Account header. Billing uses platform Checkout Sessions. The retail redirect does not settle an order. Signature-verified completion settles pending sales, expiry releases reserved inventory, and provider event IDs deduplicate retries. Test refused payments and delivery retries in your own authorized Stripe sandbox before commercial use. Live charging, physical payment terminals, and provider onboarding are outside this build.
 
+On 23 November 2026, a £1.00 GBP card sale through hosted Stripe Checkout was verified against a connected sandbox merchant using an isolated local database. Stock fell from 2 to 1 at checkout. RetailPilot accepted the signed payment webhook, marked the order paid and queued one receipt. A full refund through RetailPilot restored stock to 2, and Stripe independently reported the £1.00 refund as succeeded. This run covered receipt generation and queueing. Inbox delivery was tested separately.
+
 ## Included operations
 
 Catalog and variants, barcode lookup, store inventory, adjustments, low-stock alerts, POS discounts and configurable VAT, cash and test-card checkout, printed receipts, orders and full returns, store-specific dashboard periods, reports and CSV exports, customer history, suppliers and purchase-order receiving, role-based staff invitations, subscription limits and workspace settings.
