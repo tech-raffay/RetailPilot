@@ -62,6 +62,8 @@ Use one row per variant, up to 500 rows and 256 KiB per file. Required headings 
 
 ## Workspaces and staff
 
+In **Customers**, owners and managers can open a profile and choose **Edit profile** to correct contact details or update marketing consent. The profile keeps its purchase history. If two people edit the same profile, the second save prompts them to refresh and review the latest details.
+
 Use the workspace selector to open a fresh Owner or Cashier demo or create a business. Business workspaces start empty with a 14-day Starter trial. A business owner can create an invitation link for a specific staff email. Managers can operate the catalog, inventory and reports. Cashiers can ring up sales and return orders worth up to £100. The invitation recipient signs in to accept the link. Share invitation links manually, or configure RESEND_API_KEY and RETAILPILOT_FROM_EMAIL to deliver them by email. Owners can change staff roles or revoke access to active sessions.
 
 Hosted business identity comes from the Sites authentication gateway. Local installations provide a separate email/password sign-in, salted scrypt hashes, HTTP-only cookies, and one-time password recovery codes. Save the recovery code when setting up a local account. The local adapter discards inbound identity headers.

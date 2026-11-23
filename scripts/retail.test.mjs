@@ -144,6 +144,27 @@ test('CSV import reports bad rows, enforces file limits and rechecks conflicts a
  assert.equal(commit.status,409);
  assert.equal((await call('state',undefined,c)).body.workspace.products.some(row=>row.sku==='A-1'),false);
 });
+test('manager edits a customer without losing purchases or overwriting a newer consent choice',async()=>{
+ const owner=(await call('onboard',{name:'Profile shop',store:'London',owner:'Owner'},'','profile-owner')).cookie;
+ const post=(path,data)=>call(path,data,owner,'profile-owner');
+ const invite=await post('invite',{email:'profile-manager@example.com',role:'Manager'});
+ const token=new URL(invite.body.link).searchParams.get('invite');
+ const manager=(await call('join',{token,name:'Manager'},'','profile-manager')).cookie;
+ const customer=(await post('customer',{name:'Buyer',email:'old@example.test',consent:true})).body;
+ const item=(await post('product',{sku:'EDIT',name:'Shirt',category:'Clothes',price:900,cost:100,threshold:0,quantity:2,store:'london'})).body;
+ const sale=await post('checkout',{...cart('edit-profile-order'),items:[{id:item.id,qty:1}],customer:customer.id});
+ assert.equal(sale.status,200);
+ const edit={id:customer.id,name:'Updated buyer',email:'new@example.test',phone:'',consent:false,revision:0};
+ assert.equal((await post('customer/update',{...edit,email:'invalid'})).status,400);
+ assert.equal((await call('customer/update',edit,await demo('Cashier'))).status,403);
+ assert.equal((await call('customer/update',edit,await demo())).status,404);
+ assert.equal((await call('customer/update',edit,manager,'profile-manager')).status,200);
+ assert.equal((await post('customer/update',{...edit,consent:true})).status,409);
+ const report=(await post('customer/export?id='+customer.id,undefined)).body;
+ assert.equal(report.customer.marketingConsent,false);
+ assert.equal(report.customer.email,edit.email);
+ assert.deepEqual(report.purchases.map(o=>o.order),[sale.body.id]);
+});
 test('removing a customer detaches only that profile and preserves stock and sale records',async()=>{
  const owner=await demo();
  const {body:customer}=await call('customer',{name:'Removal test',email:'remove@example.test',phone:'123',consent:true},owner);

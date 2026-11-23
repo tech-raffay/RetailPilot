@@ -80,6 +80,18 @@ export function change(s,action,b,m){
     const p={id:old?.id||uid(),stock:old?.stock||{},name:required(b.name,'a product name'),sku,barcode:str(b.barcode),category:required(b.category,'a category'),price:num(b.price,0,99999999),cost:num(b.cost,0,99999999),tax:num(b.tax??s.vat,0,100),threshold:num(b.threshold,0,99999),size:str(b.size),color:str(b.color),photo:old?.photo||'',imageUrl:b.imageUrl&&/^https:\/\//.test(b.imageUrl)?str(b.imageUrl,1000):''};
     if(old)Object.assign(old,p);else{s.products.push(p);storeFor(s,b.store);const n=num(b.quantity||0,0,999999);if(n)movement(s,p,b.store,n,'Opening stock',m.name,'')}
     out=p;
+  }else if(action==='customer/update'){
+    const customer=s.customers.find(row=>row.id===b.id);
+    if(!customer)fail('Customer not found.',404);
+    if(b.revision!==(customer.revision??0))fail('This profile has changed. Refresh the page and review the latest details.',409);
+    if([b.name,b.email,b.phone].some(value=>typeof value!=='string'||value.trim().length>120)){
+      fail('Enter up to 120 characters for each contact field.');
+    }
+    const name=required(b.name,'a name'),email=b.email.trim(),phone=b.phone.trim();
+    if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))fail('Enter a valid email address.');
+    if(typeof b.consent!=='boolean')fail('Choose a marketing preference.');
+    Object.assign(customer,{name,email,phone,consent:b.consent,revision:b.revision+1});
+    out=customer;
   }else if(action==='customer/remove'){
     permit(m.role,['Owner']);
     const index=s.customers.findIndex(customer=>customer.id===b.id);

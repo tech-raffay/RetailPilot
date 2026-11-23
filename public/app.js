@@ -99,6 +99,11 @@ document.addEventListener('submit',async e=>{const f=e.target.closest('form[data
    return;
  }
  if(action==='member')b.remove=b.remove==='on';
+ if(action==='customer/update'){
+   await api(action,{...b,revision:Number(b.revision),consent:b.consent==='on'});
+   await refresh('Customer profile updated.');
+   return showForm('customerDetail',b.id);
+ }
  if(action==='transfer'){
    await api('transfer',b);
    if(ctx.store!=='all'&&ctx.store!==b.from&&ctx.store!==b.to)ctx.store=b.from;

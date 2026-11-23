@@ -35,8 +35,35 @@ export function showForm(act,id=''){
  if(act==='productForm')return modal(p?'Edit product':'Add product',form('product',`<input type="hidden" name="id" value="${esc(p?.id)}">${field('Product name','name','text',p?.name)}<div class="form-grid">${field('SKU','sku','text',p?.sku)}${field('Barcode','barcode','text',p?.barcode,'')}${field('Category','category','text',p?.category)}${field('Colour','color','text',p?.color,'')}${field('Size','size','text',p?.size,'')}${field('VAT (%)','tax','number',p?.tax??s.vat,'required min="0" max="100"')}${field('Retail price (£)','price','number',(p?.price||0)/100,'required min="0" step=".01"')}${field('Unit cost (£)','cost','number',(p?.cost||0)/100,'required min="0" step=".01"')}${field('Low-stock threshold','threshold','number',p?.threshold??5,'required min="0"')}${p?'':field('Opening quantity','quantity','number',0,'required min="0"')}</div>${p?'':selectField('Opening stock location','store',shops(),localStore())}${field('Product image URL','imageUrl','url',p?.imageUrl,'placeholder="https://…"') }`,'Save product'),true);
  if(act==='adjustForm'){const [pid,store]=id.split('|');return modal('Adjust stock',form('adjust',selectField('Product','product',variants(),pid)+selectField('Location','store',shops(),store||localStore())+field('Quantity change','delta','number','','required placeholder="e.g. 5 or -2"')+field('Reason','reason','text','','required placeholder="e.g. Stock count correction"'),'Save adjustment'))}
  if(act==='refundForm')return modal('Return order #'+id,form('refund',`<input type="hidden" name="id" value="${esc(id)}">${desc('Record a full refund against this sale.')}${field('Reason for return','reason')}${check('restock','Return items to available stock',true)}`,'Confirm return'));
- if(act==='customerForm'||act==='supplierForm'){const a=act.replace('Form','');return modal('Add '+a,form(a,field('Name','name')+field('Email','email','email','','')+field('Phone','phone','tel','','')+(a==='customer'?check('consent','Customer agreed to marketing messages')+'<a href="/privacy.html" target="_blank" rel="noopener">Customer privacy notice</a>':''),'Save '+a))}
- if(act==='customerDetail'){const c=s.customers.find(x=>x.id===id);if(!c)return;const os=orders().filter(o=>o.customer===id);return modal(c.name,desc(c.email||c.phone||'Customer profile')+`<div class="item-line"><span>Total spent</span><b>${money(sum(os,net))}</b></div><h3>Purchase history</h3>`+table(['Order','Date','Total'],os.slice(0,20).map(o=>`<tr data-act="order" data-id="${o.id}" class="clickrow" tabindex="0"><td>#${o.id}</td><td>${date(o.date)}</td><td>${money(o.total)}</td></tr>`),'No purchases yet')+(owner()?'<div class="form-foot"><a class="btn secondary" href="/api/customer/export?id='+encodeURIComponent(c.id)+'" download>Download customer data</a>'+btn('Remove profile','removeCustomerForm','','secondary',`data-id="${esc(c.id)}"`)+'</div>':''))}
+ if(act==='customerForm'||act==='supplierForm'||act==='editCustomerForm'){
+   const editing=act==='editCustomerForm';
+   const customer=editing?s.customers.find(row=>row.id===id):null;
+   if(editing&&(!customer||cashRole()))return;
+   const entity=act==='supplierForm'?'supplier':'customer';
+   const editFields=editing?`<input type="hidden" name="id" value="${esc(id)}"><input type="hidden" name="revision" value="${customer.revision??0}">`:'';
+   const fields=field('Name','name','text',customer?.name,'required maxlength="120"')
+     +field('Email','email','email',customer?.email,'maxlength="120"')
+     +field('Phone','phone','tel',customer?.phone,'maxlength="120"');
+   const preference=entity==='customer'?check('consent','Customer agreed to marketing messages',customer?.consent)
+     +'<a href="/privacy.html" target="_blank" rel="noopener">Customer privacy notice</a>':'';
+   return modal(editing?'Edit customer profile':'Add '+entity,
+     form(editing?'customer/update':entity,editFields+fields+preference,editing?'Save changes':'Save '+entity));
+ }
+ if(act==='customerDetail'){
+   const customer=s.customers.find(row=>row.id===id);
+   if(!customer)return;
+   const os=orders().filter(o=>o.customer===id);
+   const details=[['Email',customer.email||'—'],['Phone',customer.phone||'—'],
+     ['Marketing consent',customer.consent?'Opted in':'Not opted in'],['Total spent',money(sum(os,net))]];
+   const history=table(['Order','Date','Total'],os.slice(0,20).map(o=>
+     `<tr data-act="order" data-id="${esc(o.id)}" class="clickrow" tabindex="0"><td>#${esc(o.id)}</td><td>${date(o.date)}</td><td>${money(o.total)}</td></tr>`),'No purchases yet');
+   const target=`data-id="${esc(id)}"`;
+   const edit=cashRole()?'':btn('Edit profile','editCustomerForm','edit','secondary',target);
+   const ownerActions=owner()?'<a class="btn secondary" href="/api/customer/export?id='+encodeURIComponent(id)+'" download>Download customer data</a>'
+     +btn('Remove profile','removeCustomerForm','','secondary',target):'';
+   return modal(customer.name,details.map(([label,value])=>`<div class="item-line"><span>${label}</span><b>${esc(value)}</b></div>`).join('')
+     +'<h3>Purchase history</h3>'+history+(edit||ownerActions?'<div class="form-foot">'+edit+ownerActions+'</div>':''));
+ }
  if(act==='removeCustomerForm'&&owner()){
    const customer=s.customers.find(c=>c.id===id);
    if(!customer)return;

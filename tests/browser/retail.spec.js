@@ -170,6 +170,29 @@ test('catalog CSV template previews, imports and opens stock once', async ({page
   await expect(page.getByRole('heading',{name:'Already imported'})).toBeVisible();
 });
 
+test('owner edits customer contact details and withdraws marketing consent',async({page})=>{
+  await page.goto('/#customers');
+  await page.getByRole('row').filter({hasText:'Amelia Brooks'}).click();
+  const dialog=page.getByRole('dialog');
+  const firstOrder=await dialog.locator('tbody tr td').first().innerText();
+  await dialog.getByRole('button',{name:'Edit profile'}).click();
+  await expect(dialog.getByLabel('Name',{exact:true})).toHaveValue('Amelia Brooks');
+  await dialog.getByLabel('Email',{exact:true}).fill('updated@example.test');
+  await dialog.getByLabel('Phone').fill('01234 567890');
+  await dialog.getByLabel('Customer agreed to marketing messages').check();
+  await dialog.getByRole('button',{name:'Save changes'}).click();
+  await expect(dialog).toContainText('Opted in');
+  await dialog.getByRole('button',{name:'Edit profile'}).click();
+  await dialog.getByLabel('Customer agreed to marketing messages').uncheck();
+  await dialog.getByRole('button',{name:'Save changes'}).click();
+  await expect(dialog).toContainText('Not opted in');
+  await page.reload();
+  await page.getByRole('row').filter({hasText:'updated@example.test'}).click();
+  await expect(dialog).toContainText('01234 567890');
+  await expect(dialog).toContainText('Not opted in');
+  await expect(dialog).toContainText(firstOrder);
+});
+
 test('owner can cancel or confirm customer profile removal', async ({ page }) => {
   await page.goto('/#customers');
   const row = page.getByRole('row').filter({ hasText: 'Amelia Brooks' });
