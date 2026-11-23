@@ -1,6 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {api} from '../src/api.js';
 import {openDatabase} from './local-db.mjs';
 import {verifyEvent} from '../src/payments.js';
@@ -12,6 +16,36 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('stock check finds ledger drift and incomplete transfers without changing stored records',t=>{
+ const dir=mkdtempSync(join(tmpdir(),'retailpilot-stock-'));
+ const db=openDatabase(join(dir,'retail.sqlite')).raw;
+ t.after(()=>{db.close();rmSync(dir,{recursive:true,force:true})});
+ const put=db.prepare('INSERT OR REPLACE INTO organizations(id,document) VALUES (?,?)');
+ const shop={stores:[{id:'london'},{id:'york'}],products:[{id:'j',sku:'JKT',stock:{london:8,york:2}}],movements:[
+   {id:'open',product:'j',store:'london',delta:10,after:10,reason:'Opening stock'},
+   {id:'out',product:'j',store:'london',otherStore:'york',delta:-2,after:8,reason:'Transfer out',ref:'TR-1'},
+   {id:'in',product:'j',store:'york',otherStore:'london',delta:2,after:2,reason:'Transfer in',ref:'TR-1'}
+ ]};
+ const run=()=>spawnSync(process.execPath,['scripts/check-stock.mjs'],{encoding:'utf8',env:{...process.env,RETAILPILOT_DATA_DIR:dir}});
+ put.run('shop',JSON.stringify(shop));
+ put.run('demo',JSON.stringify({demo:true}));
+ const clean=run();
+ assert.equal(clean.status,0,clean.stderr);
+ assert.match(clean.stdout,/Business workspaces checked: 1. Demos skipped: 1/);
+ shop.movements.pop();
+ shop.movements[1].after=9;
+ shop.products[0].stock.london=7;
+ const before=JSON.stringify(shop);
+ put.run('shop',before);
+ const drift=run();
+ assert.equal(drift.status,2,drift.stderr);
+ assert.match(drift.stderr,/Movement balance mismatch/);
+ assert.match(drift.stderr,/Inventory balance mismatch/);
+ assert.match(drift.stderr,/Unmatched stock transfer/);
+ assert.equal(db.prepare("SELECT document FROM organizations WHERE id='shop'").get().document,before);
+ put.run('broken','{}');
+ assert.equal(run().status,1);
+});
 test('Stripe receipt waits for a signed paid event and pending receipt data is removed with its customer',async()=>{
  const env={DB,RESEND_API_KEY:'mock',RETAILPILOT_FROM_EMAIL:'shop@example.test',STRIPE_WEBHOOK_SECRET:'whsec_mock'};
  const owner=(await call('onboard',{name:'Stripe Mail',store:'London',owner:'Owner'},'','stripe-mail')).cookie;

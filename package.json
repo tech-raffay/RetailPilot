@@ -11,6 +11,7 @@
     "start": "node --env-file-if-exists=.env.local scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "backup": "node --env-file-if-exists=.env.local scripts/backup.mjs",
+    "check:stock": "node --env-file-if-exists=.env.local scripts/check-stock.mjs",
     "monitor:payments": "node --env-file-if-exists=.env.local scripts/monitor-payments.mjs",
     "test": "node --test scripts/retail.test.mjs",
     "test:e2e": "playwright test"

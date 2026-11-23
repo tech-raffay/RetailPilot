@@ -52,6 +52,8 @@ Owners and managers can open **Reports**, select a store and choose the last 7, 
 
 ## Stock transfers
 
+Run `npm run check:stock` to check local business workspaces. It replays stock movements for each variant and store, compares each recorded balance with the running total, checks both sides of transfers, and compares the result with current inventory. Demo workspaces have preloaded stock and are skipped. The check opens SQLite read-only. Exit code 0 means the scan finished without alerts, 2 identifies discrepancies, and 1 means the scan was incomplete. The output identifies the workspace revision and affected records for investigation.
+
 In a workspace with at least two stores, owners and managers can open Inventory, select **Transfer stock**, choose a variant and move available units to another store. Confirmation deducts and receives stock immediately. The Movements tab shows both entries with the same searchable transfer reference.
 
 ## Catalog CSV import
