@@ -57,7 +57,6 @@ async function retailCheckoutUrl(env,origin,id,order,account){
  const fields={mode:'payment','line_items[0][price_data][currency]':'gbp','line_items[0][price_data][product_data][name]':order.id,'line_items[0][price_data][unit_amount]':String(order.total),'line_items[0][quantity]':'1','metadata[org]':id,'metadata[order]':order.id,'metadata[flow]':'retail',success_url:origin+'/#orders',cancel_url:origin+'/#orders'};
  if(order.pickup){
    fields.success_url=fields.cancel_url=origin+'/shop.html?shop='+id+'#'+order.key.slice('pickup:'.length);
-   fields['payment_method_types[0]']='card';
  }
  return stripe(env,'checkout/sessions',fields,id+order.id,order.pickup?.account||account);
 }
@@ -75,7 +74,8 @@ function cancelReservation(s,order,reason){
 }
 function publicPickup(order){
   return {id:order.id,status:order.status,total:order.total,location:order.pickup.location,address:order.pickup.address,
-    collected:!!order.pickup.collectedAt,...(order.status==='Paid'?{code:order.pickup.code}:{})};
+    collected:!!order.pickup.collectedAt,processing:order.status==='Pending'&&order.paymentProcessing===true,
+    ...(order.status==='Paid'?{code:order.pickup.code}:{})};
 }
 async function storefront(req,env,u,id,action,b){
   const db=env.DB;
@@ -114,7 +114,7 @@ async function storefront(req,env,u,id,action,b){
       return o;
     },env);
   }
-  if(order.status!=='Pending')return json(publicPickup(order));
+  if(order.status!=='Pending'||order.paymentProcessing)return json(publicPickup(order));
   if(Date.now()-order.date>=24*3600000)fail('Payment session has ended. Check the order status.',409);
   if(order.pickup.checkoutUrl)return json({...publicPickup(order),url:order.pickup.checkoutUrl});
   let session;
@@ -128,7 +128,7 @@ async function storefront(req,env,u,id,action,b){
   }
   return json(await write(db,id,s=>{
     const saved=findOrder(s);
-    if(saved.status!=='Pending')return publicPickup(saved);
+    if(saved.status!=='Pending'||saved.paymentProcessing)return publicPickup(saved);
     saved.pickup.checkoutUrl=session.url;
     return {...publicPickup(saved),url:session.url};
   }));
@@ -145,7 +145,11 @@ async function webhook(req,env){
       const order=s.orders.find(x=>x.id===meta.order)||fail('Unknown order.');
       const merchant=order.pickup?.account||s.stripeAccount;
       if(!merchant||event.account!==merchant)fail('Merchant mismatch.');
-      if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&o.amount_total===order.total&&o.currency==='gbp'&&order.status==='Pending'){order.status='Paid';order.intent=o.payment_intent;jobs.push(receiptMessage(s,order))}
+      const completed=event.type==='checkout.session.completed';
+      const matchesTotal=o.amount_total===order.total&&o.currency==='gbp';
+      if(completed&&o.payment_status==='unpaid'&&matchesTotal&&order.status==='Pending')order.paymentProcessing=true;
+      if((completed||event.type==='checkout.session.async_payment_succeeded')&&o.payment_status==='paid'&&matchesTotal&&order.status==='Pending'){order.status='Paid';order.intent=o.payment_intent;jobs.push(receiptMessage(s,order))}
+      if(event.type==='checkout.session.async_payment_failed')cancelReservation(s,order,'Payment failed');
       if(event.type==='checkout.session.expired')cancelReservation(s,order,'Expired checkout');
     }else if(meta.flow==='billing'&&!event.account){
       if(event.type==='checkout.session.completed'&&o.payment_status==='paid'&&plans[meta.plan]){s.plan=meta.plan;s.billing='active';s.stripeCustomer=o.customer;s.subscription=o.subscription}
@@ -277,6 +281,7 @@ export async function api(req,env){
   if(path==='payment/resume'){
     const order=current.orders.find(o=>o.id===b.id)||fail('Order not found.',404);
     if(order.pickup)fail('Resume online payment from the shopper’s order page.',409);
+    if(order.paymentProcessing&&order.status==='Pending')fail('Stripe is processing the payment.',409);
     if(order.status!=='Pending'||order.method!=='Stripe')fail('This order is not awaiting payment.');
     const session=await retailCheckoutUrl(env,u.origin,id,order,current.stripeAccount);return json({url:session.url});
   }
@@ -304,7 +309,7 @@ export async function api(req,env){
   if(path==='checkout'&&b.method==='Stripe'){
     if(!current.stripeAccount||!stripeReady(env))fail('Connect a test merchant account first.');
     const o=await write(db,id,s=>change(s,'checkout',b,m),env);
-    if(o.status!=='Pending')return json(o);
+    if(o.status!=='Pending'||o.paymentProcessing)return json(o);
     const checkout=await retailCheckoutUrl(env,u.origin,id,o,current.stripeAccount);return json({...o,url:checkout.url});
   }
   if(path==='plan')b.memberCount=(await members(db,id)).length;

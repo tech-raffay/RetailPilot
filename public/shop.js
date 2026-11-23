@@ -94,13 +94,14 @@ function confirmation(order){
   clearTimeout(timer);notify('');get('storefront').hidden=true;
   get('basket-link').hidden=true;
   const box=get('confirmation');box.hidden=false;
-  const title=order.collected&&order.status==='Paid'?'Order collected':({Paid:'Payment confirmed',Pending:'Awaiting payment',Refunded:'Order refunded',Cancelled:'Checkout cancelled'})[order.status]||'Order status';
+  const title=order.collected&&order.status==='Paid'?'Order collected':({Paid:'Payment confirmed',Pending:order.processing?'Payment processing':'Awaiting payment',Refunded:'Order refunded',Cancelled:'Checkout cancelled'})[order.status]||'Order status';
   box.innerHTML='<h2>'+title+'</h2><p>'+esc(order.id)+' · '+money(order.total)+'</p><p>Pickup at '+esc([order.location,order.address].filter(Boolean).join(' · '))+'</p>';
   if(order.code&&!order.collected)box.insertAdjacentHTML('beforeend','<p>Show this code at pickup</p><p class="code">'+esc(order.code)+'</p>');
   if(order.status==='Pending'){
     const resume=document.createElement('button');resume.textContent='Resume test payment';
     resume.onclick=async()=>{resume.disabled=true;try{const r=await request('/checkout',{key:pendingKey});if(r.url)location.assign(r.url);else confirmation(r)}catch(e){notify(e.message)}finally{resume.disabled=false}};
-    box.append(resume);timer=setTimeout(refreshOrder,5000);
+    if(!order.processing)box.append(resume);
+    timer=setTimeout(refreshOrder,5000);
   }else{
     cart.clear();saveCart();
     const again=document.createElement('button');again.textContent='Back to shop';

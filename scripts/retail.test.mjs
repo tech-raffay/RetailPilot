@@ -67,6 +67,7 @@ test('storefront checkout uses the merchant and releases stock after a definitiv
  let reject=true;
  t.mock.method(globalThis,'fetch',async(url,{headers,body})=>{
    assert.equal(headers['Stripe-Account'],'acct_pickup');
+   assert.equal(body.has('payment_method_types[0]'),false);
    assert.ok(body.get('success_url').includes('/shop.html?shop='+org+'#'));
    return reject?Response.json({error:{type:'invalid_request_error'}},{status:400}):Response.json({url:'https://checkout.example.test/test'});
  });
@@ -78,11 +79,25 @@ test('storefront checkout uses the merchant and releases stock after a definitiv
  assert.equal(pending.body.status,'Pending');assert.equal(pending.body.code,undefined);
  reject=true;
  assert.equal((await guest('checkout',{key:payload.key})).body.url,pending.body.url);
- const raw=JSON.stringify({id:'evt_pickup',type:'checkout.session.completed',account:'acct_pickup',livemode:false,data:{object:{
-   metadata:{org,flow:'retail',order:pending.body.id},currency:'gbp',amount_total:500,payment_status:'paid',payment_intent:'pi_pickup'}}});
- const time=Math.floor(Date.now()/1000),sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
- assert.equal((await api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',body:raw,headers:{'Stripe-Signature':'t='+time+',v1='+sig}}),{DB,...env})).status,200);
+ async function event(order,type,paymentStatus){
+   const raw=JSON.stringify({id:order+type,type,account:'acct_pickup',livemode:false,data:{object:{
+     metadata:{org,flow:'retail',order},currency:'gbp',amount_total:500,payment_status:paymentStatus,payment_intent:'pi_pickup'}}});
+   const time=Math.floor(Date.now()/1000),sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
+   const response=await api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',body:raw,headers:{'Stripe-Signature':'t='+time+',v1='+sig}}),{DB,...env});
+   assert.equal(response.status,200);
+ }
+ await event(pending.body.id,'checkout.session.completed','unpaid');
+ const processing=(await guest('checkout',{key:payload.key})).body;
+ assert.equal(processing.processing,true);
+ assert.equal(processing.code,undefined);assert.equal(processing.url,undefined);
+ await event(pending.body.id,'checkout.session.async_payment_succeeded','paid');
  assert.match((await guest('status',payload)).body.code,/^[A-F0-9]{8}$/);
+ assert.equal((await call(path)).body.products[0].stock,1);
+ reject=false;payload.key=crypto.randomUUID();
+ const next=(await guest('checkout',payload)).body;
+ await event(next.id,'checkout.session.completed','unpaid');
+ for(let i=0;i<2;i++)await event(next.id,'checkout.session.async_payment_failed','unpaid');
+ assert.equal((await guest('status',payload)).body.status,'Cancelled');
  assert.equal((await call(path)).body.products[0].stock,1);
 });
 test('loyalty rewards cannot be spent twice and returns reverse both sides of a sale',async()=>{

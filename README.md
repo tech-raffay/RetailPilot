@@ -56,6 +56,10 @@ In **Settings → Edit storefront**, the owner selects a pickup location and ena
 
 The shopper can bookmark the order page to check payment status and retrieve the pickup code. Staff open the order and choose **Collect order** to confirm handover with that code. A signed Stripe payment event confirms the order, and checkout expiry releases reserved stock. The pilot supports pickup at one selected location per shop.
 
+Stripe Checkout uses the connected merchant’s Dashboard payment methods. Configure the connected-account webhook to receive `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`. When a payment takes time to settle, the buyer sees **Payment processing**. Settlement unlocks the pickup code. A failed payment restores the reserved units.
+
+In an isolated storefront test on 23 November 2026, creating a £1.00 Checkout Session reduced available stock from 2 to 1. Expiring that session at Stripe delivered a signed webhook that cancelled the pickup order and restored stock to 2.
+
 ## Stock transfers
 
 Run `npm run check:stock` to check local business workspaces. It replays stock movements for each variant and store, compares each recorded balance with the running total, checks both sides of transfers, and compares the result with current inventory. Demo workspaces have preloaded stock and are skipped. The check opens SQLite read-only. Exit code 0 means the scan finished without alerts, 2 identifies discrepancies, and 1 means the scan was incomplete. The output identifies the workspace revision and affected records for investigation.
