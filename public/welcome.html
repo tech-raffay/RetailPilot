@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore RetailPilot's register, inventory and reports in a sample two-store clothing business.">
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/welcome.css">
+  <title>RetailPilot · Retail software for independent shops</title>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main navigation">
+      <a class="brand" href="/welcome.html"><img src="/mark.svg" width="34" height="34" alt="">RetailPilot</a>
+      <a href="#pricing">Pricing</a>
+      <a class="workspace" href="/">Open workspace</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <h1 id="hero-title">From the till to the stockroom.</h1>
+        <p>Ring up a sale, check what’s left on the shelf and handle a return in one workspace. Try it with Northline Outfitters, a sample shop with two locations.</p>
+        <div class="actions">
+          <button type="button" data-demo="Owner">Explore owner demo</button>
+          <button type="button" data-demo="Cashier">Try cashier register</button>
+        </div>
+        <p class="note">Each launch opens a fresh demo with sample sales and simulated card payments.</p>
+        <p id="feedback" role="status" aria-live="polite"></p>
+        <noscript>Enable JavaScript to open the interactive demos.</noscript>
+      </div>
+      <figure>
+        <img src="/images/register-preview.webp" width="1380" height="875" alt="London register with a field jacket and a cotton tee in the cart, totalling £83.99.">
+        <figcaption>Northline Outfitters <span>London register</span></figcaption>
+      </figure>
+    </section>
+    <section id="pricing" aria-labelledby="pricing-title">
+      <div class="pricing-head">
+        <div><h2 id="pricing-title">Monthly plans</h2><p>Choose by number of stores and staff. New businesses start with a 14-day Starter trial.</p></div>
+        <a class="trial" href="/?new=1">Start a Starter trial</a>
+      </div>
+      <div id="plans"></div>
+      <p class="note">Pilot subscriptions use Stripe test mode.</p>
+    </section>
+  </main>
+  <footer><span>RetailPilot</span><a href="/privacy.html">Customer privacy notice</a></footer>
+  <script type="module" src="/welcome.js"></script>
+</body>
+</html>

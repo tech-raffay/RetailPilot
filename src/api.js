@@ -131,7 +131,7 @@ export async function api(req,env){
     const s=JSON.parse((await doc(db,id)).document);
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
     delete s.events;delete s.audit;delete s.catalogImports;
-    return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
+    return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),localAuth:env.LOCAL_AUTH===true,emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
   }
   if(req.method!=='POST')fail('Route not found.',404);
   if(path==='logout'){const t=(req.headers.get('Cookie')||'').match(/rp_session=([a-f0-9-]+)/)?.[1];if(t)await query(db,'DELETE FROM sessions WHERE token=?',await hash(t)).run();return json({ok:true},200,{'Set-Cookie':'rp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'})}

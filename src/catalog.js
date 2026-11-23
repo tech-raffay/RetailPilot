@@ -1,4 +1,5 @@
-export const plans = {Starter:{price:19,stores:1,staff:2},Growth:{price:49,stores:3,staff:10},Business:{price:99,stores:1000,staff:10000}};
+import {retailPlans} from '../public/plans.js';
+export const plans = retailPlans;
 export const uid = () => crypto.randomUUID();
 const styles = [
   ['Canvas Field Jacket','JKT','field-jacket','Outerwear',5999,2600,'Olive'],

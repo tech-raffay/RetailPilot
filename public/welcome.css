@@ -1,0 +1,39 @@
+:root { font-family: Inter, system-ui, sans-serif; color: #192236; background: #f8f9fc; }
+* { box-sizing: border-box; }
+body, figure, h1, h2, h3, p { margin: 0; }
+header { background: #fff; border-bottom: 1px solid #dce0e9; }
+nav, main, footer { width: min(1240px, 92%); margin-inline: auto; }
+nav, .brand, .actions, .pricing-head, figcaption, footer { display: flex; align-items: center; }
+nav { gap: 1.5rem; min-height: 4.5rem; }
+a { color: inherit; }
+nav a, .trial { text-decoration: none; font-weight: 600; }
+.brand { margin-right: auto; gap: .5rem; font-size: 1.3rem; letter-spacing: -.05em; }
+.workspace, .trial, button { border: 1px solid #c8cdd9; border-radius: .5rem; padding: .7rem 1rem; }
+.hero { display: grid; grid-template-columns: .85fr 1.15fr; align-items: center; gap: clamp(2rem,5vw,5rem); padding: clamp(3rem,8vw,7.5rem) 0; }
+h1 { font-size: clamp(3rem,5.5vw,5.3rem); letter-spacing: -.065em; line-height: 1.02; max-width: 10ch; }
+.hero p, .pricing-head p { color: #48546b; line-height: 1.6; margin-top: 1rem; }
+.actions { flex-wrap: wrap; gap: .55rem; margin-top: 1.6rem; }
+button { background: white; color: #202a40; cursor: pointer; font: inherit; font-weight: 650; }
+button:first-child { background: #3d4fc3; border-color: #3d4fc3; color: white; }
+button:disabled { opacity: .65; cursor: wait; }
+a:hover { text-decoration: underline; }
+button:hover { box-shadow: 0 2px 8px #18233a20; }
+:focus-visible { outline: 3px solid #465bd2; outline-offset: 3px; }
+.note, figcaption, footer { font-size: .88rem; color: #536079; }
+#feedback:empty { display: none; }
+figure { min-width: 0; padding: clamp(.75rem,2vw,1.65rem); background: #e4e8f5; border-radius: 1rem; }
+figure img { width: 100%; height: auto; display: block; border: 1px solid #cdd2df; border-radius: .45rem; }
+figcaption, footer, .pricing-head { justify-content: space-between; gap: 1rem; }
+figcaption { padding-top: .8rem; }
+#pricing { padding: 2.25rem 0 3.5rem; border-top: 1px solid #d6dbe6; scroll-margin: 1rem; }
+h2 { font-size: clamp(2rem,4vw,3rem); letter-spacing: -.055em; }
+.pricing-head p { margin-top: .35rem; }
+.trial { flex-shrink: 0; background: white; }
+#plans { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin: 1.4rem 0 .8rem; }
+article { background: white; border: 1px solid #d6dbe6; border-radius: .7rem; padding: 1.4rem; }
+article h3 { font-size: 1.15rem; }
+article strong { display: inline-block; margin: .65rem 0; font-size: 2rem; letter-spacing: -.05em; }
+article small, article p { color: #48546b; }
+footer { padding: 1.2rem 0; border-top: 1px solid #d6dbe6; }
+@media(max-width:760px) { .hero { grid-template-columns: 1fr; } h1 { max-width: 14ch; } #plans { grid-template-columns: 1fr; } .pricing-head { align-items: flex-start; flex-direction: column; } }
+@media(max-width:460px) { nav { gap: .6rem; font-size: .875rem; } .workspace { padding: .5rem; } .brand { font-size: 1.1rem; } }

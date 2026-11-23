@@ -1,5 +1,40 @@
 import { test, expect } from '@playwright/test';
 
+test('welcome page opens independent owner and cashier demos and keeps workspace pricing consistent',async({page})=>{
+  await page.goto('/welcome.html');
+  const business=page.locator('article').filter({has:page.getByRole('heading',{name:'Business'})});
+  await expect(business).toContainText('£99');
+  await expect(business).toContainText('1,000 stores · 10,000 staff');
+  expect(await page.locator('figure img').evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
+  await page.getByRole('button',{name:'Explore owner demo'}).click();
+  await expect(page).toHaveURL(/#overview$/);
+  await page.getByRole('link',{name:'Billing & plans'}).click();
+  await expect(page.locator('.plan').filter({hasText:'Business'})).toContainText('1,000 stores');
+  await page.request.post('/api/adjust',{data:{product:'JKT-001',store:'london',delta:-5,reason:'Demo check'}});
+  await page.getByRole('link',{name:'RetailPilot demo & pricing'}).click();
+  await page.getByRole('button',{name:'Try cashier register'}).click();
+  await expect(page).toHaveURL(/#pos$/);
+  await expect(page.getByRole('heading',{name:'Point of sale'})).toBeVisible();
+  const state=await (await page.request.get('/api/state')).json();
+  expect(state.member.role).toBe('Cashier');
+  expect(state.workspace.products.find(p=>p.sku==='JKT-001').stock.london).toBe(10);
+});
+
+test('mobile landing page handles demo errors and leads into local trial signup',async({page})=>{
+  await page.setViewportSize({width:375,height:812});
+  await page.goto('/welcome.html');
+  await page.route('**/api/demo',r=>r.fulfill({status:503,body:'{}'}));
+  await page.getByRole('button',{name:'Try cashier register'}).click();
+  await expect(page.getByRole('status')).toContainText('Please try again');
+  await expect(page.getByRole('button',{name:'Explore owner demo'})).toBeEnabled();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.unroute('**/api/demo');
+  await page.getByRole('link',{name:'Start a Starter trial'}).click();
+  await page.getByRole('link',{name:'Continue to sign in'}).click();
+  await page.getByRole('link',{name:'Create account'}).click();
+  await expect(page.getByRole('heading',{name:'Create account'})).toBeVisible();
+});
+
 test('cashier can scan and complete checkout using only the keyboard',async({page})=>{
   await page.request.post('/api/demo',{data:{role:'Cashier'}});
   await page.goto('/#pos');

@@ -17,7 +17,7 @@ const zip = execFileSync(process.platform==='win32'?'python':'python3',['-c',[
  "sys.stdout.buffer.write(b.getvalue())"
 ].join('\n')],{maxBuffer:16*1024*1024});
 assets['/downloads/RetailPilot-source.zip']=['application/zip',zip.toString('base64')];
-let bundle='';for(const file of ['catalog','business','catalog-import','payments','email','api'])bundle+=(await readFile('src/'+file+'.js','utf8')).replace(/^import .*?;\r?\n/gm,'').replace(/^export /gm,'')+'\n';
+let bundle=(await readFile('public/plans.js','utf8')).replace(/^export /gm,'')+'\n';for(const file of ['catalog','business','catalog-import','payments','email','api'])bundle+=(await readFile('src/'+file+'.js','utf8')).replace(/^import .*?;\r?\n/gm,'').replace(/^export /gm,'')+'\n';
 bundle+='\nconst assets='+JSON.stringify(assets)+';\n';
 bundle+=`export default {async scheduled(event,env){await flushEmail(env)},async fetch(request,env,ctx){
 const url=new URL(request.url);
