@@ -4,8 +4,15 @@ const shops=()=>ctx.s.stores.map(s=>[s.id,s.name]);
 const variants=()=>ctx.s.products.map(p=>[p.id,p.name+' · '+p.sku+' · '+p.size]);
 const check=(name,label,checked=false)=>`<label class="checkbox"><input name="${name}" type="checkbox" ${checked?'checked':''}>${esc(label)}</label>`;
 const desc=v=>`<p class="dialog-desc">${esc(v)}</p>`;
+function pointsReceipt(order){
+ const {earned,redeemed}=order.loyalty;
+ if(order.status==='Refunded')return '<dt>Points reversed</dt><dd>'+earned+'</dd>'+(redeemed?'<dt>Points restored</dt><dd>'+redeemed+'</dd>':'');
+ if(order.status==='Cancelled')return '';
+ return (redeemed?'<dt>Points '+(order.status==='Pending'?'reserved':'used')+'</dt><dd>'+redeemed+'</dd>':'')
+   +'<dt>Points '+(order.status==='Pending'?'on payment':'earned')+'</dt><dd>'+earned+'</dd>';
+}
 export function orderDetail(id){const o=ctx.s.orders.find(x=>x.id===id);if(!o)return;
- modal('Order #'+o.id,`<div class="receipt"><div class="receipt-brand"><img src="/mark.svg" width="32" alt=""><h3>${esc(ctx.s.name)}</h3>${badge(o.status)}</div><p>${esc(storeName(o.store))} · ${date(o.date,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</p><dl><dt>Customer</dt><dd>${esc(buyer(o.customer))}</dd><dt>Cashier</dt><dd>${esc(o.operator)}</dd><dt>Payment</dt><dd>${esc(o.method)}</dd></dl>${o.items.map(l=>`<div class="receipt-line"><span>${esc(l.name)}<small>${esc(l.sku)} · ${l.qty} × ${money(l.price)}</small></span><b>${money(l.price*l.qty)}</b></div>`).join('')}<dl>${o.discount?`<dt>Discount</dt><dd>${o.discount}%</dd>`:''}<dt>VAT</dt><dd>${money(o.tax)}</dd><dt class="total">Total</dt><dd class="total">${money(o.total)}</dd>${o.method==='Cash'&&o.received!=null?`<dt>Cash received</dt><dd>${money(o.received)}</dd><dt>Change</dt><dd>${money(o.received-o.total)}</dd>`:''}</dl>${o.refund?desc('Return reason: '+o.refund.reason):''}</div><div class="form-foot">${o.status==='Paid'?btn('Return order','refundForm','','secondary',`data-id="${esc(id)}"`):''}${(o.status==='Pending'&&o.method==='Stripe'?btn('Resume checkout','resumePay','card','primary',`data-id="${esc(id)}"`):'')+btn('Print receipt','print','print','primary')}</div>`)}
+ modal('Order #'+o.id,`<div class="receipt"><div class="receipt-brand"><img src="/mark.svg" width="32" alt=""><h3>${esc(ctx.s.name)}</h3>${badge(o.status)}</div><p>${esc(storeName(o.store))} · ${date(o.date,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</p><dl><dt>Customer</dt><dd>${esc(buyer(o.customer))}</dd><dt>Cashier</dt><dd>${esc(o.operator)}</dd><dt>Payment</dt><dd>${esc(o.method)}</dd></dl>${o.items.map(l=>`<div class="receipt-line"><span>${esc(l.name)}<small>${esc(l.sku)} · ${l.qty} × ${money(l.price)}</small></span><b>${money(l.price*l.qty)}</b></div>`).join('')}<dl>${o.discount?`<dt>Discount</dt><dd>${o.discount}%</dd>`:''}${o.loyalty?pointsReceipt(o):''}<dt>VAT</dt><dd>${money(o.tax)}</dd><dt class="total">Total</dt><dd class="total">${money(o.total)}</dd>${o.method==='Cash'&&o.received!=null?`<dt>Cash received</dt><dd>${money(o.received)}</dd><dt>Change</dt><dd>${money(o.received-o.total)}</dd>`:''}</dl>${o.refund?desc('Return reason: '+o.refund.reason):''}</div><div class="form-foot">${o.status==='Paid'?btn('Return order','refundForm','','secondary',`data-id="${esc(id)}"`):''}${(o.status==='Pending'&&o.method==='Stripe'?btn('Resume checkout','resumePay','card','primary',`data-id="${esc(id)}"`):'')+btn('Print receipt','print','print','primary')}</div>`)}
 export function showForm(act,id=''){
  const p=ctx.s.products.find(x=>x.id===id),s=ctx.s;
  if(act==='transferForm'){
@@ -55,6 +62,7 @@ export function showForm(act,id=''){
    const os=orders().filter(o=>o.customer===id);
    const details=[['Email',customer.email||'—'],['Phone',customer.phone||'—'],
      ['Marketing consent',customer.consent?'Opted in':'Not opted in'],['Total spent',money(sum(os,net))]];
+   if(s.loyaltyEnabled||customer.availablePoints)details.push(['Available loyalty points',customer.availablePoints]);
    const history=table(['Order','Date','Total'],os.slice(0,20).map(o=>
      `<tr data-act="order" data-id="${esc(o.id)}" class="clickrow" tabindex="0"><td>#${esc(o.id)}</td><td>${date(o.date)}</td><td>${money(o.total)}</td></tr>`),'No purchases yet');
    const target=`data-id="${esc(id)}"`;
@@ -71,6 +79,9 @@ export function showForm(act,id=''){
      '<input type="hidden" name="id" value="'+esc(id)+'">'+desc('This permanently removes the profile, contact details and marketing consent from this workspace. Past orders will show “Removed customer”.'),'Confirm removal'));
  }
  if(act==='poForm')return modal('New purchase order',form('purchase',selectField('Supplier','supplier',s.suppliers.map(x=>[x.id,x.name]))+selectField('Product','product',variants())+selectField('Deliver to','store',shops(),localStore())+field('Units to order','qty','number',1,'required min="1"'),'Place order'));
+ if(act==='loyaltyForm'&&owner())return modal('Customer loyalty',form('loyalty/settings',
+   desc('Customers earn 1 point per whole £1 on new paid purchases. '+s.loyaltyReward.points+' points give '+s.loyaltyReward.discount+'% off one sale.')
+   +check('enabled','Enable loyalty points and rewards',s.loyaltyEnabled),'Save changes'));
  if(act==='settingsForm')return modal('Edit business details',form('settings',field('Business name','name','text',s.name)+field('Default VAT (%)','vat','number',s.vat,'required min="0" max="100"')+check('inclusive','Prices include VAT',s.inclusive),'Save changes'));
  if(act==='storeForm')return modal('Add store',form('store',field('Store name','name')+field('Address','address','text','',''),'Create store'));
  if(act==='memberForm'){const m=ctx.members.find(x=>x.principal===id);if(!m)return;return modal('Manage '+m.name, form('member',desc(m.email)+'<input type="hidden" name="principal" value="'+esc(id)+'">'+selectField('Staff role','role',[['Cashier','Cashier'],['Manager','Manager']],m.role)+check('remove','Remove this member and revoke access'),'Save member'))}

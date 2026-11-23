@@ -1,6 +1,6 @@
 import {icon} from './icons.js';
 export {icon};
-export const ctx={s:null,member:null,members:[],page:'overview',store:'all',days:7,q:'',filter:'All',tab:'Overview',cart:{},customer:'',discount:0,cartKey:crypto.randomUUID(),pageNo:0};
+export const ctx={s:null,member:null,members:[],page:'overview',store:'all',days:7,q:'',filter:'All',tab:'Overview',cart:{},customer:'',discount:0,redeemReward:false,cartKey:crypto.randomUUID(),pageNo:0};
 export const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const money=(p,dec=2)=>new Intl.NumberFormat('en-GB',{style:'currency',currency:'GBP',minimumFractionDigits:dec,maximumFractionDigits:dec}).format(p/100);
 export const date=(n,opts={day:'numeric',month:'short'})=>new Intl.DateTimeFormat('en-GB',opts).format(n);
@@ -34,7 +34,16 @@ export function pager(total){const n=Math.ceil(total/20);return n>1?`<div class=
 export const slice=rows=>rows.slice(ctx.pageNo*20,ctx.pageNo*20+20);
 export const searchInput=label=>`<label class="searchfield">${icon('search',17)}<input id="filterSearch" value="${esc(ctx.q)}" aria-label="${label}" placeholder="${label}"></label>`;
 export async function api(path,data){const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const v=await r.json();if(!r.ok)throw Object.assign(new Error(v.error||'Request failed'),{status:r.status});return v}
-export async function load(){const r=await api('state');Object.assign(ctx,{s:r.workspace,member:r.member,members:r.members,cardEnabled:r.cardEnabled,localAuth:r.localAuth,emailEnabled:r.emailEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});if(ctx.store!=='all'&&!ctx.s.stores.some(s=>s.id===ctx.store))ctx.store='all';if(ctx.customer&&!ctx.s.customers.some(c=>c.id===ctx.customer)){ctx.customer='';ctx.cartKey=crypto.randomUUID()}}
+export async function load(){
+ const r=await api('state');
+ Object.assign(ctx,{s:r.workspace,member:r.member,members:r.members,cardEnabled:r.cardEnabled,localAuth:r.localAuth,emailEnabled:r.emailEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});
+ if(ctx.store!=='all'&&!ctx.s.stores.some(s=>s.id===ctx.store))ctx.store='all';
+ const customer=ctx.s.customers.find(c=>c.id===ctx.customer);
+ if(ctx.customer&&!customer){ctx.customer='';ctx.cartKey=crypto.randomUUID()}
+ if(ctx.redeemReward&&(!ctx.s.loyaltyEnabled||!customer||customer.availablePoints<ctx.s.loyaltyReward.points)){
+   ctx.redeemReward=false;ctx.cartKey=crypto.randomUUID();
+ }
+}
 export function notify(msg){const t=document.querySelector('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t.timer);t.timer=setTimeout(()=>t.classList.remove('show'),3200)}
 export function close(){const d=document.querySelector('#modal');d.close();d.innerHTML=''}
 export function modal(title,body,wide=false){const d=document.querySelector('#modal');d.className=wide?'wide':'';d.innerHTML=`<div class="modal-head"><h2 id="dialog-heading">${esc(title)}</h2><button data-act="close" class="iconbtn" aria-label="Close">${icon('close')}</button></div><div class="modal-body">${body}</div>`;if(!d.open)d.showModal()}

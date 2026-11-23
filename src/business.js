@@ -5,6 +5,16 @@ export function num(value,min,max){const n=Number(value);if(!Number.isSafeIntege
 export function required(value,label){const s=str(value);if(!s)fail('Enter '+label+'.');return s}
 export function permit(role,allowed){if(!allowed.includes(role))fail('Your role does not have access to this action.',403)}
 export function storeFor(s,id){return s.stores.find(x=>x.id===id)||fail('Store not found.',404)}
+export const loyaltyReward={points:100,discount:10};
+export function loyaltyBalances(orders){
+  const balances=new Map();
+  for(const order of orders){
+    if(!order.customer||!order.loyalty||!['Pending','Paid'].includes(order.status))continue;
+    const earned=order.status==='Paid'?order.loyalty.earned:0;
+    balances.set(order.customer,(balances.get(order.customer)??0)+earned-order.loyalty.redeemed);
+  }
+  return balances;
+}
 function productFor(s,id){return s.products.find(p=>p.id===id)||fail('Product not found.',404)}
 function movement(s,p,store,delta,reason,actor,ref){
   const after=(p.stock[store]||0)+delta;
@@ -22,13 +32,24 @@ export function checkout(s,b,member){
   for(const l of b.items)qtyById.set(l.id,(qtyById.get(l.id)||0)+num(l.qty,1,9999));
   const items=[...qtyById].map(([id,qty])=>{const p=productFor(s,id);return {id,sku:p.sku,name:p.name,size:p.size,price:p.price,cost:p.cost,tax:p.tax??s.vat,qty}});
   const subtotal=items.reduce((t,i)=>t+i.price*i.qty,0);
-  const discount=num(b.discount||0,0,100);const net=Math.round(subtotal*(1-discount/100));
+  const loyaltyActive=!!(s.loyaltyEnabled??s.demo)&&!!b.customer;
+  let discount=num(b.discount||0,0,100);
+  const redeem=b.redeemReward===true;
+  if(redeem){
+    if(!loyaltyActive)fail('Select a customer in an active loyalty program.');
+    if(discount)fail('Remove the manual discount before using points.');
+    if((loyaltyBalances(s.orders).get(b.customer)??0)<loyaltyReward.points)fail('This customer has insufficient available points.',409);
+    discount=loyaltyReward.discount;
+  }
+  const net=Math.round(subtotal*(1-discount/100));
+  if(redeem&&net===subtotal)fail('Add an item eligible for the reward.');
   const tax=Math.round(items.reduce((t,i)=>t+i.price*i.qty*(1-discount/100)*i.tax/(s.inclusive?100+i.tax:100),0));
   const total=net+(s.inclusive?0:tax);
   if(!['Cash','Demo card','Stripe'].includes(b.method)||b.method==='Demo card'&&!s.demo)fail('Choose an available payment method.');
   if(b.method==='Demo card'&&b.decline)fail('Test card declined. Choose another payment method.',402);
   const received=b.method==='Cash'?num(b.received??total,total,999999999):total;
   const o={id:'ORD-'+(++s.sequence),key:b.key,date:Date.now(),store:b.store,customer:b.customer||'',operator:member.name,channel:'In-store',items,subtotal,discount,tax,total,received,method:b.method,status:b.method==='Stripe'?'Pending':'Paid'};
+  if(loyaltyActive)o.loyalty={earned:Math.floor(total/100),redeemed:redeem?loyaltyReward.points:0};
   if(b.emailReceipt===true&&!s.demo){
     const customer=s.customers.find(c=>c.id===o.customer);
     if(!customer||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email))fail('Select a customer with a valid email to request a receipt.');
@@ -112,6 +133,11 @@ export function change(s,action,b,m){
   }else if(action==='store'){
     permit(m.role,['Owner']);if(s.stores.length>=plans[s.plan].stores)fail('Upgrade your plan to add another store.',403);
     out={id:uid(),name:required(b.name,'a store name'),address:str(b.address)};s.stores.push(out);
+  }else if(action==='loyalty/settings'){
+    permit(m.role,['Owner']);
+    if(typeof b.enabled!=='boolean')fail('Choose a loyalty program status.');
+    s.loyaltyEnabled=b.enabled;
+    out={enabled:b.enabled};
   }else if(action==='settings'){
     permit(m.role,['Owner']);s.name=required(b.name,'a business name');s.vat=num(b.vat,0,100);s.inclusive=!!b.inclusive;out={ok:true};
   }else if(action==='plan'){

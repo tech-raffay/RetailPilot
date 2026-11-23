@@ -16,6 +16,58 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('loyalty rewards cannot be spent twice and returns reverse both sides of a sale',async()=>{
+ const owner=await demo();
+ const post=(path,data)=>call(path,data,owner);
+ const buyer=(await post('customer',{name:'Reward buyer'})).body;
+ const balance=async()=>(await post('customer/export?id='+buyer.id,undefined)).body.customer.availablePoints;
+ const purchase=async(key,qty,extra={})=>post('checkout',{...cart(key,qty),customer:buyer.id,...extra});
+ await post('loyalty/settings',{enabled:false});
+ assert.equal((await purchase('before',1)).body.loyalty,undefined);
+ assert.equal((await call('loyalty/settings',{enabled:true},await demo('Cashier'))).status,403);
+ await post('loyalty/settings',{enabled:true});
+ const initial=(await purchase('earn',2)).body;
+ assert.equal(await balance(),119);
+ assert.equal((await purchase('stack',1,{redeemReward:true,discount:5})).status,400);
+ const result=await Promise.all(['reward-a','reward-b'].map(key=>purchase(key,1,{redeemReward:true})));
+ assert.deepEqual(result.map(r=>r.status).sort(),[200,409]);
+ const reward=result.find(r=>r.status===200).body;
+ assert.equal(reward.total,5399);
+ assert.deepEqual(reward.loyalty,{earned:53,redeemed:100});
+ assert.equal((await purchase(reward.key,1,{redeemReward:true})).body.id,reward.id);
+ assert.equal(await balance(),72);
+ await post('refund',{id:initial.id,reason:'Return',restock:true});
+ assert.equal(await balance(),-47);
+ for(let i=0;i<2;i++)await post('refund',{id:reward.id,reason:'Return',restock:true});
+ assert.equal(await balance(),0);
+});
+test('an expired Stripe checkout releases reserved loyalty points',async t=>{
+ const person='loyalty-expiry';
+ const env={STRIPE_TEST_KEY:'sk_test_fixture',STRIPE_WEBHOOK_SECRET:'fixture'};
+ const cookie=(await call('onboard',{name:'Reward shop',store:'London',owner:'Owner'},'',person)).cookie;
+ const post=(path,data)=>call(path,data,cookie,person,'',env);
+ const org=(await post('identity',undefined)).body.workspaces[0].org_id;
+ env.STRIPE_ACCOUNTS=org+'=acct_loyalty';
+ await post('stripe/account',{account:'acct_loyalty'});
+ await post('loyalty/settings',{enabled:true});
+ const customer=(await post('customer',{name:'Buyer'})).body.id;
+ const product=(await post('product',{name:'Jacket',sku:'JKT',category:'Clothes',price:5999,cost:0,quantity:3,threshold:0,store:'london'})).body.id;
+ t.mock.method(globalThis,'fetch',async()=>Response.json({url:'https://checkout.example.test/reward'}));
+ const balance=async()=>(await post('customer/export?id='+customer,undefined)).body.customer.availablePoints;
+ await post('checkout',{...cart('points-earn'),customer,items:[{id:product,qty:2}]});
+ assert.equal(await balance(),119);
+ const pending=await post('checkout',{...cart('points-hold'),customer,items:[{id:product,qty:1}],method:'Stripe',redeemReward:true});
+ assert.equal(pending.body.status,'Pending');
+ assert.equal(await balance(),19);
+ const raw=JSON.stringify({id:'evt_reward_expired',type:'checkout.session.expired',account:'acct_loyalty',
+   livemode:false,data:{object:{metadata:{org,order:pending.body.id,flow:'retail'}}}});
+ const time=Math.floor(Date.now()/1000);
+ const sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
+ const event=await api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',body:raw,
+   headers:{'Stripe-Signature':'t='+time+',v1='+sig}}),{DB,...env});
+ assert.equal(event.status,200);
+ assert.equal(await balance(),119);
+});
 test('stock check finds ledger drift and incomplete transfers without changing stored records',t=>{
  const dir=mkdtempSync(join(tmpdir(),'retailpilot-stock-'));
  const db=openDatabase(join(dir,'retail.sqlite')).raw;
@@ -57,6 +109,7 @@ test('Stripe checkout reserves once and a confirmed refund restores stock once',
  env.STRIPE_ACCOUNTS=org+'='+account;
  const post=(path,data)=>call(path,data,owner,person,'',env);
  assert.equal((await post('stripe/account',{account})).status,200);
+ await post('loyalty/settings',{enabled:true});
  const product=(await post('product',{name:'Test item',sku:'TEST',category:'Test',price:100,cost:10,quantity:2,threshold:0,store:'london'})).body;
  const customer=(await post('customer',{name:'Buyer',email:'buyer@example.test'})).body;
  const requests=[];
@@ -84,6 +137,7 @@ test('Stripe checkout reserves once and a confirmed refund restores stock once',
  const receipts=()=>DB.raw.prepare("SELECT count(*) AS n FROM email_outbox WHERE org_id=? AND kind='receipt'").get(org).n;
  assert.equal((await state()).products[0].stock.london,1);
  assert.equal(receipts(),0);
+ assert.equal((await state()).customers[0].availablePoints,0);
  const raw=JSON.stringify({id:'evt_checkout_check',type:'checkout.session.completed',livemode:false,account,data:{object:{
    metadata:{org,order:pending.body.id,flow:'retail'},currency:'gbp',amount_total:100,payment_status:'paid',payment_intent:intent}}});
  const time=Math.floor(Date.now()/1000),sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
@@ -92,6 +146,7 @@ test('Stripe checkout reserves once and a confirmed refund restores stock once',
    assert.equal(res.status,200);
  }
  assert.equal(receipts(),1);
+ assert.equal((await state()).customers[0].availablePoints,1);
  const refund={id:pending.body.id,reason:'Test return',restock:true};
  assert.equal((await post('refund',refund)).status,502);
  const beforeRetry=await state();
@@ -100,6 +155,7 @@ test('Stripe checkout reserves once and a confirmed refund restores stock once',
  refundAvailable=true;
  for(let i=0;i<2;i++)assert.equal((await post('refund',refund)).body.status,'Refunded');
  const after=await state();
+ assert.equal(after.customers[0].availablePoints,0);
  assert.equal(after.products[0].stock.london,2);
  assert.equal(after.movements.filter(m=>m.reason==='Return').length,1);
  assert.equal(requests.length,4);

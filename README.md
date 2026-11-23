@@ -64,6 +64,10 @@ Use one row per variant, up to 500 rows and 256 KiB per file. Required headings 
 
 ## Workspaces and staff
 
+Owners can enable customer loyalty under **Settings → Edit loyalty program**. Business workspaces start with loyalty off and demos start with it on. Once enabled, each new paid sale linked to a customer earns one point per whole £1 of the final total. In POS, select the customer and choose **Use 100 points for 10% off** to redeem one reward. A manual discount and a reward cannot be combined. The balance covers all stores in that business.
+
+Pending Stripe orders reserve redeemed points until payment or expiry. A full refund restores the redeemed points and reverses the points earned on that sale. Returning a purchase after spending its points can leave a negative balance, which future earnings offset. Pausing the program keeps existing balances. Earlier sales retain their original terms.
+
 In **Customers**, owners and managers can open a profile and choose **Edit profile** to correct contact details or update marketing consent. The profile keeps its purchase history. If two people edit the same profile, the second save prompts them to refresh and review the latest details.
 
 Use the workspace selector to open a fresh Owner or Cashier demo or create a business. Business workspaces start empty with a 14-day Starter trial. A business owner can create an invitation link for a specific staff email. Managers can operate the catalog, inventory and reports. Cashiers can ring up sales and return orders worth up to £100. The invitation recipient signs in to accept the link. Share invitation links manually, or configure RESEND_API_KEY and RETAILPILOT_FROM_EMAIL to deliver them by email. Owners can change staff roles or revoke access to active sessions.

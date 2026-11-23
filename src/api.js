@@ -1,5 +1,5 @@
 import {newWorkspace,uid,plans} from './catalog.js';
-import {change,fail,permit,required,str,refund} from './business.js';
+import {change,fail,permit,required,str,refund,loyaltyReward,loyaltyBalances} from './business.js';
 import {stripeReady,stripe,verifyEvent} from './payments.js';
 import {planCatalogImport,commitCatalogImport} from './catalog-import.js';
 import {mailReady,receiptMessage,stockMessage,queueStatement,deliverEmail} from './email.js';
@@ -118,10 +118,12 @@ export async function api(req,env){
       order:o.id,date:new Date(o.date).toISOString(),store:workspace.stores.find(s=>s.id===o.store)?.name||o.store,
       channel:o.channel,method:o.method,status:o.status,totalPence:o.total,vatPence:o.tax,discountPercent:o.discount,
       items:o.items.map(i=>({sku:i.sku,name:i.name,size:i.size,quantity:i.qty,unitPricePence:i.price})),
+      ...(o.loyalty?{loyalty:o.loyalty}:{}),
       ...(o.refund?{refund:{date:new Date(o.refund.date).toISOString(),reason:o.refund.reason}}:{})
     }));
     const report={business:workspace.name,currency:'GBP',customer:{id:customer.id,name:customer.name,
-      email:customer.email,phone:customer.phone,marketingConsent:customer.consent===true},purchases};
+      email:customer.email,phone:customer.phone,marketingConsent:customer.consent===true,
+      availablePoints:loyaltyBalances(workspace.orders).get(customer.id)??0},purchases};
     return new Response(JSON.stringify(report,null,2),{headers:{
       'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',
       'Content-Disposition':'attachment; filename="customer-export.json"'
@@ -129,6 +131,10 @@ export async function api(req,env){
   }
   if(path==='state'&&req.method==='GET'){
     const s=JSON.parse((await doc(db,id)).document);
+    s.loyaltyEnabled=s.loyaltyEnabled??s.demo;
+    s.loyaltyReward=loyaltyReward;
+    const balances=loyaltyBalances(s.orders);
+    for(const customer of s.customers)customer.availablePoints=balances.get(customer.id)??0;
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
     delete s.events;delete s.audit;delete s.catalogImports;
     return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),localAuth:env.LOCAL_AUTH===true,emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});

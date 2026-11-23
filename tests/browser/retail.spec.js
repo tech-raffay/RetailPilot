@@ -170,6 +170,29 @@ test('catalog CSV template previews, imports and opens stock once', async ({page
   await expect(page.getByRole('heading',{name:'Already imported'})).toBeVisible();
 });
 
+test('cashier applies an earned loyalty reward to the next sale',async({page})=>{
+  await page.request.post('/api/demo',{data:{role:'Cashier'}});
+  const earned=await page.request.post('/api/checkout',{data:{
+    key:'earn-at-register',method:'Cash',store:'london',customer:'c0',items:[{id:'JKT-001',qty:2}]
+  }});
+  expect(earned.ok()).toBe(true);
+  await page.goto('/#pos');
+  await page.getByLabel('Customer',{exact:true}).selectOption('c0');
+  await expect(page.getByText('119 loyalty points')).toBeVisible();
+  await page.getByLabel('Find a product or scan barcode').fill('JKT-001');
+  await page.getByRole('button',{name:/Canvas Field Jacket/}).click();
+  await page.getByRole('button',{name:'Use 100 points for 10% off'}).click();
+  await page.getByRole('button',{name:'Checkout',exact:true}).click();
+  await expect(page.getByLabel('Cash received (£)')).toHaveValue('53.99');
+  await page.getByRole('button',{name:'Confirm payment'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Points used100');
+  await expect(page.getByRole('dialog')).toContainText('Points earned53');
+  await page.getByRole('button',{name:'Close',exact:true}).click();
+  await page.goto('/#customers');
+  await page.getByRole('row').filter({hasText:'Amelia Brooks'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Available loyalty points72');
+});
+
 test('owner edits customer contact details and withdraws marketing consent',async({page})=>{
   await page.goto('/#customers');
   await page.getByRole('row').filter({hasText:'Amelia Brooks'}).click();
