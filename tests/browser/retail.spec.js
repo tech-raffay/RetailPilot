@@ -1,5 +1,44 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({context}) => {
+  // Exercise the local app and its print layout with the system font fallback.
+  await context.route('https://fonts.googleapis.com/**', route => route.fulfill({contentType:'text/css',body:''}));
+});
+
+test('sales report prints the selected store, UTC dates and matching product totals', async ({page}) => {
+  await page.setViewportSize({width:375,height:812});
+  await page.goto('/#reports');
+  await page.getByLabel('Store location').selectOption('manchester');
+  await page.getByLabel('Reporting period').selectOption('30');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const {workspace} = await (await page.request.get('/api/state')).json();
+  const end = new Date();
+  end.setUTCHours(0,0,0,0);
+  const start = +end - 29 * 86400000;
+  const paid = workspace.orders.filter(o => o.store === 'manchester' && o.status === 'Paid'
+    && o.date >= start && o.date < +end + 86400000);
+  expect(paid.length).toBeGreaterThan(0);
+  const amount = new Intl.NumberFormat('en-GB',{style:'currency', currency:'GBP'})
+    .format(paid.reduce((sum,o) => sum + o.total,0) / 100);
+  const units = paid.flatMap(o => o.items).reduce((sum,item) => sum + item.qty,0);
+  await page.evaluate(() => { window.print = () => { window.printRequested = true; }; });
+  await page.getByRole('button',{name:'Print / Save PDF'}).click();
+  expect(await page.evaluate(() => window.printRequested)).toBe(true);
+  await page.emulateMedia({media:'print'});
+  const heading = page.locator('.report-print-heading');
+  await expect(heading).toBeVisible();
+  await expect(heading).toContainText(workspace.name + ' · Manchester');
+  const format = new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+  await expect(heading).toContainText(format.format(start) + ' – ' + format.format(end) + ' (UTC)');
+  await expect(page.locator('.summary-strip strong').first()).toHaveText(amount);
+  const quantities = await page.locator('.sales-report tbody tr td:nth-child(2)').allTextContents();
+  expect(quantities.reduce((sum,qty) => sum + Number(qty),0)).toBe(units);
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.getByRole('button',{name:'Print / Save PDF'})).toBeHidden();
+  const pdf = await page.pdf({format:'A4'});
+  expect(pdf.subarray(0,5).toString()).toBe('%PDF-');
+});
+
 test('welcome page opens independent owner and cashier demos and keeps workspace pricing consistent',async({page})=>{
   await page.goto('/welcome.html');
   const business=page.locator('article').filter({has:page.getByRole('heading',{name:'Business'})});

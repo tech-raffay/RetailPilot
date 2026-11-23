@@ -46,6 +46,10 @@ npm run test:e2e
 
 A demo card can return an approval or a decline. Neither action moves money. Seeded historical card orders represent sample transactions. Refunds are full-order refunds.
 
+## Sales reports
+
+Owners and managers can open **Reports**, select a store and choose the last 7, 30 or 90 days. **Print / Save PDF** opens the browser print dialog. Choose **Save as PDF** to save the totals and product table with the workspace, store and UTC date range. **Export CSV** downloads the product rows.
+
 ## Stock transfers
 
 In a workspace with at least two stores, owners and managers can open Inventory, select **Transfer stock**, choose a variant and move available units to another store. Confirmation deducts and receives stock immediately. The Movements tab shows both entries with the same searchable transfer reference.

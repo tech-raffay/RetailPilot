@@ -1,4 +1,4 @@
-import {ctx,buyer,esc,icon,money,initials,api,load,notify,modal,close,btn,field,form,lowItems,localStore,storeName,orders,date,csv,owner,cashRole,empty} from './core.js';
+import {ctx,buyer,esc,icon,money,initials,api,load,notify,modal,close,btn,field,form,lowItems,localStore,storeName,orders,dateRange,date,csv,owner,cashRole,empty} from './core.js';
 import {dashboard,best} from './dashboard.js';
 import {products,inventory,sales,customers,suppliers,reports,staff,settings,billing,pos,cartLines,totals} from './views.js';
 import {showForm,orderDetail} from './dialogs.js';
@@ -45,7 +45,7 @@ async function act(action,id=''){
  if(action==='cartMinus'){if(--ctx.cart[id]<=0)delete ctx.cart[id];ctx.cartKey=crypto.randomUUID();return bodyOnly()}
  if(action==='addFromProduct'){go('pos');return add(id)}
  if(action==='print')return window.print();
- if(action==='export'){if(ctx.page==='reports'){const start=new Date();start.setUTCHours(0,0,0,0);const rows=best(orders().filter(o=>o.date>=+start-(ctx.days-1)*86400000));csv('retailpilot-product-report',['Product','Units','Sales GBP'],rows.map(x=>[x.p.name,x.qty,(x.total/100).toFixed(2)]))}else{const os=orders().filter(o=>(ctx.filter==='All'||o.status===ctx.filter)&&[o.id,buyer(o.customer),o.method].join(' ').toLowerCase().includes(ctx.q.toLowerCase()));csv('retailpilot-orders',['Order','Date','Store','Status','Amount GBP'],os.map(o=>[o.id,new Date(o.date).toISOString(),storeName(o.store),o.status,(o.total/100).toFixed(2)]))}return notify('CSV exported.')}
+ if(action==='export'){if(ctx.page==='reports'){const rows=best(dateRange(orders(),ctx.days));csv('retailpilot-product-report',['Product','Units','Sales GBP'],rows.map(x=>[x.p.name,x.qty,(x.total/100).toFixed(2)]))}else{const os=orders().filter(o=>(ctx.filter==='All'||o.status===ctx.filter)&&[o.id,buyer(o.customer),o.method].join(' ').toLowerCase().includes(ctx.q.toLowerCase()));csv('retailpilot-orders',['Order','Date','Store','Status','Amount GBP'],os.map(o=>[o.id,new Date(o.date).toISOString(),storeName(o.store),o.status,(o.total/100).toFixed(2)]))}return notify('CSV exported.')}
  if(action==='receive'){await api('receive',{id});return refresh('Delivery received. Stock updated.')}
  if(action==='choosePlan'){if(ctx.s.demo){await api('plan',{plan:id});return refresh('Demo plan updated.')}const r=await api('stripe/billing',{plan:id});location.assign(r.url);return}
  if(action==='resumePay'){const r=await api('payment/resume',{id});location.assign(r.url);return}

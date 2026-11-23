@@ -1,4 +1,4 @@
-import {ctx,esc,money,date,orders,net,margin,sum,dateRange,lowItems,btn,cardTitle,pageTitle,buyer,photo,empty,select,badge,stock,localStore,storeName,table,searchInput,filtered,pager,slice,cashRole,owner,icon,initials} from './core.js';
+import {ctx,esc,money,date,orders,net,margin,sum,startDay,dateRange,lowItems,btn,cardTitle,pageTitle,buyer,photo,empty,select,badge,stock,localStore,storeName,table,searchInput,filtered,pager,slice,cashRole,owner,icon,initials} from './core.js';
 import {rangeSelect,best} from './dashboard.js';
 import {retailPlans,planAllowance} from './plans.js';
 const tr=(cells,act='',id='')=>`<tr ${act?`class="clickrow" data-act="${act}" data-id="${esc(id)}" tabindex="0"`:''}>${cells.map(x=>'<td>'+x+'</td>').join('')}</tr>`;
@@ -17,8 +17,31 @@ export function inventory(){
 export function sales(){const data=orders().filter(o=>filtered([o.id,buyer(o.customer),o.method])&&(ctx.filter==='All'||o.status===ctx.filter));return listing('Orders','Review sales, print receipts, and manage returns.',btn('Export CSV','export','download'),searchInput('Search order or customer')+select('filter',options(['All','Paid','Refunded','Pending','Cancelled']),ctx.filter,'Order status'),['Order','Customer','Store','Date','Status','Amount'],data,o=>tr(['<b class="order-id">#'+esc(o.id)+'</b>',esc(buyer(o.customer)),esc(storeName(o.store)),date(o.date),badge(o.status),money(o.total)],'order',o.id))}
 export function customers(){const data=ctx.s.customers.filter(c=>filtered([c.name,c.email]));return listing('Customers','Customer profiles and purchase history.',btn('Add customer','customerForm','plus','primary'),searchInput('Search customers'),['Customer','Email','Orders','Total spent'],data,c=>{const os=orders().filter(o=>o.customer===c.id&&o.status==='Paid');return tr([`<span class="person"><span class="avatar small">${initials(esc(c.name))}</span><b>${esc(c.name)}</b></span>`,esc(c.email),os.length,money(sum(os,net))],'customerDetail',c.id)})}
 export function suppliers(){const po=ctx.tab==='Purchase orders';return pageTitle('Suppliers','Manage suppliers, purchase orders, and deliveries.',btn(po?'New purchase order':'Add supplier',po?'poForm':'supplierForm','plus','primary'))+`<section class="panel listing">${tabs(['Suppliers','Purchase orders'])}${po?table(['Order','Supplier','Product','Qty','Store','Status',''],ctx.s.purchaseOrders.map(o=>tr([esc(o.id),esc(ctx.s.suppliers.find(s=>s.id===o.supplier)?.name),esc(ctx.s.products.find(p=>p.id===o.product)?.name),o.qty,esc(storeName(o.store)),badge(o.status),o.status==='Ordered'?btn('Receive','receive','','text',`data-id="${o.id}"`):''])),'No purchase orders yet'):table(['Supplier','Email','Phone'],ctx.s.suppliers.map(s=>tr([esc(s.name),esc(s.email),esc(s.phone||'—')])),'No suppliers yet')}</section>`}
-export function reports(){const arr=dateRange(orders(),ctx.days),paid=arr.filter(o=>o.status==='Paid');return pageTitle('Reports','Sales and product performance for the selected period.',rangeSelect()+btn('Export CSV','export','download'))+
- `<div class="summary-strip">${[['Net sales',money(sum(paid,net))],['Average order',money(paid.length?sum(paid,net)/paid.length:0)],['Net profit',money(sum(paid,margin))]].map(([l,v])=>`<div class="panel"><span>${l}</span><strong>${v}</strong></div>`).join('')}</div><section class="panel listing">${cardTitle('Product performance','bars')}${table(['Product','Units sold','Sales'],best(arr).map(x=>tr([productCell(x.p),x.qty,money(x.total)])))}</section>`}
+export function reports(){
+  const paid = dateRange(orders(),ctx.days).filter(order => order.status === 'Paid');
+  const sales = sum(paid,net);
+  const end = startDay();
+  const start = end - (ctx.days - 1) * 86400000;
+  const dateFormat = {day:'numeric', month:'short', year:'numeric', timeZone:'UTC'};
+  const period = date(start,dateFormat) + ' – ' + date(end,dateFormat) + ' (UTC)';
+  const actions = rangeSelect() + btn('Export CSV','export','download') + btn('Print / Save PDF','print');
+  const summary = [
+    ['Net sales',money(sales)],
+    ['Average order',money(paid.length ? sales / paid.length : 0)],
+    ['Net profit',money(sum(paid,margin))]
+  ];
+  const rows = best(paid).map(({p,qty,total}) => tr([
+    `<span class="product-cell">${photo(p)}<b>${esc(p.name)}</b></span>`, qty, money(total)
+  ]));
+  return `<div class="sales-report">
+    ${pageTitle('Reports','Sales and product performance for the selected period.',actions)}
+    <header class="report-print-heading">
+      <h1>Sales report</h1><p>${esc(ctx.s.name)} · ${esc(storeName(ctx.store))}</p><p>${period}</p>
+    </header>
+    <div class="summary-strip">${summary.map(([label,value]) => `<div class="panel"><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>
+    <section class="panel listing">${cardTitle('Product performance','bars')}${rows.length ? table(['Product','Units sold','Sales'],rows) : empty('No paid sales in this period')}</section>
+  </div>`;
+}
 export function staff(){return pageTitle('Team members','Manage workspace access and staff roles.',btn('Invite member','inviteForm','plus','primary'))+`<section class="panel listing">${table(['Name','Email','Role'],ctx.members.map(m=>tr([`<span class="person"><span class="avatar small">${initials(esc(m.name))}</span><b>${esc(m.name)}</b></span>`,esc(m.email),esc(m.role)],m.role==='Owner'?'':'memberForm',m.principal)))}</section>`}
 export function settings(){return pageTitle('Store settings','Business details, locations, and payment settings.')+`<div class="setting-grid"><section class="panel settings">${cardTitle('Business details','building',btn('Edit','settingsForm','edit','text'))}<dl><dt>Business name</dt><dd>${esc(ctx.s.name)}</dd><dt>Currency</dt><dd>GBP (£)</dd><dt>Default VAT</dt><dd>${ctx.s.vat}%</dd><dt>Tax display</dt><dd>${ctx.s.inclusive?'Tax inclusive':'Tax exclusive'}</dd></dl></section><section class="panel settings">${cardTitle('Store locations','store',btn('Add store','storeForm','plus','text'))}${ctx.s.stores.map(s=>`<div class="item-line"><span>${icon('pin')} ${esc(s.name)}</span><small>${esc(s.address)}</small></div>`).join('')}</section><section class="panel settings">${cardTitle('Payments','card')}<dl><dt>Cash</dt><dd>Enabled</dd><dt>Card processing</dt><dd>${ctx.s.demo?'Demo provider':ctx.cardEnabled?'Stripe test mode':'Disconnected'}</dd></dl>${ctx.s.demo?'':btn('Connect merchant','stripeForm','card')}</section><section class="panel settings">${cardTitle('Workspace','grid')}${ctx.s.demo?'':btn('Email delivery','emailStatus','','text')}<div class="item-line"><span>${ctx.s.demo?'Demo workspace':'Business workspace'}</span>${btn('Switch workspace','workspace','','text')}</div></section></div>`}
 export function billing(){
