@@ -46,6 +46,66 @@ test('stock check finds ledger drift and incomplete transfers without changing s
  put.run('broken','{}');
  assert.equal(run().status,1);
 });
+test('Stripe checkout reserves once and a confirmed refund restores stock once',async t=>{
+ const person='sandbox-check',account='acct_check',intent='pi_checkout_check';
+ const DB=openDatabase();
+ t.after(()=>DB.raw.close());
+ const env={DB,STRIPE_TEST_KEY:'sk_test_fixture',STRIPE_WEBHOOK_SECRET:'webhook-fixture',
+   RESEND_API_KEY:'mail-fixture',RETAILPILOT_FROM_EMAIL:'shop@example.test'};
+ const owner=(await call('onboard',{name:'Sandbox shop',store:'London',owner:'Owner'},'',person,'',env)).cookie;
+ const org=(await call('identity',undefined,owner,person,'',env)).body.workspaces[0].org_id;
+ env.STRIPE_ACCOUNTS=org+'='+account;
+ const post=(path,data)=>call(path,data,owner,person,'',env);
+ assert.equal((await post('stripe/account',{account})).status,200);
+ const product=(await post('product',{name:'Test item',sku:'TEST',category:'Test',price:100,cost:10,quantity:2,threshold:0,store:'london'})).body;
+ const customer=(await post('customer',{name:'Buyer',email:'buyer@example.test'})).body;
+ const requests=[];
+ let refundAvailable=false;
+ t.mock.method(globalThis,'fetch',async(url,{headers,body})=>{
+   assert.equal(headers['Stripe-Account'],account);
+   const path=new URL(url).pathname;
+   requests.push({path,key:headers['Idempotency-Key']});
+   if(path==='/v1/checkout/sessions'){
+     assert.equal(body.get('line_items[0][price_data][unit_amount]'),'100');
+     assert.equal(body.get('metadata[org]'),org);
+     return Response.json({url:'https://checkout.example.test/session'});
+   }
+   assert.equal(path,'/v1/refunds');
+   assert.equal(body.get('payment_intent'),intent);
+   return refundAvailable?Response.json({status:'succeeded'}):Response.json({error:{message:'Temporary failure'}},{status:503});
+ });
+ const sale={key:'sandbox-sale',store:'london',method:'Stripe',customer:customer.id,emailReceipt:true,items:[{id:product.id,qty:1}]};
+ const pending=await post('checkout',sale);
+ assert.equal(pending.status,200);
+ assert.equal(pending.body.status,'Pending');
+ assert.equal((await post('checkout',sale)).body.id,pending.body.id);
+ assert.equal(requests[0].key,requests[1].key);
+ const state=async()=>(await call('state',undefined,owner,person,'',env)).body.workspace;
+ const receipts=()=>DB.raw.prepare("SELECT count(*) AS n FROM email_outbox WHERE org_id=? AND kind='receipt'").get(org).n;
+ assert.equal((await state()).products[0].stock.london,1);
+ assert.equal(receipts(),0);
+ const raw=JSON.stringify({id:'evt_checkout_check',type:'checkout.session.completed',livemode:false,account,data:{object:{
+   metadata:{org,order:pending.body.id,flow:'retail'},currency:'gbp',amount_total:100,payment_status:'paid',payment_intent:intent}}});
+ const time=Math.floor(Date.now()/1000),sig=createHmac('sha256',env.STRIPE_WEBHOOK_SECRET).update(time+'.'+raw).digest('hex');
+ for(let i=0;i<2;i++){
+   const res=await api(new Request('https://retail.test/api/stripe/webhook',{method:'POST',body:raw,headers:{'Stripe-Signature':'t='+time+',v1='+sig}}),{DB,...env});
+   assert.equal(res.status,200);
+ }
+ assert.equal(receipts(),1);
+ const refund={id:pending.body.id,reason:'Test return',restock:true};
+ assert.equal((await post('refund',refund)).status,502);
+ const beforeRetry=await state();
+ assert.equal(beforeRetry.orders[0].status,'Paid');
+ assert.equal(beforeRetry.products[0].stock.london,1);
+ refundAvailable=true;
+ for(let i=0;i<2;i++)assert.equal((await post('refund',refund)).body.status,'Refunded');
+ const after=await state();
+ assert.equal(after.products[0].stock.london,2);
+ assert.equal(after.movements.filter(m=>m.reason==='Return').length,1);
+ assert.equal(requests.length,4);
+ assert.equal(requests[2].key,requests[3].key);
+ assert.notEqual(requests[0].key,requests[2].key);
+});
 test('Stripe receipt waits for a signed paid event and pending receipt data is removed with its customer',async()=>{
  const env={DB,RESEND_API_KEY:'mock',RETAILPILOT_FROM_EMAIL:'shop@example.test',STRIPE_WEBHOOK_SECRET:'whsec_mock'};
  const owner=(await call('onboard',{name:'Stripe Mail',store:'London',owner:'Owner'},'','stripe-mail')).cookie;
