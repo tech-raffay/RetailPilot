@@ -6,6 +6,8 @@ RetailPilot is a working retail management application for independent shops. Th
 
 Open `/welcome.html` for the demo and pricing page. Choose Owner to open a fresh sample dashboard or Cashier to open a fresh register. The root URL opens the workspace. Pricing and workspace limits use the same plan definitions.
 
+Open `/case-study.html` to follow a £119.98 London jacket sale through checkout, inventory and a restocked return in a fresh owner demo.
+
 Install Node.js 22.13 or later. The application uses the built-in SQLite driver and has no runtime npm dependencies.
 
 ```sh

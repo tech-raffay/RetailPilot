@@ -163,7 +163,16 @@ test('owner downloads a customer profile from the customer list', async ({ page 
 });
 
 test('London jacket sale produces a receipt and the return restores inventory', async ({ page }) => {
-  await page.goto('/#pos');
+  await page.setViewportSize({width: 375, height: 812});
+  await page.goto('/welcome.html');
+  await page.getByRole('link', { name: 'See how a jacket sale updates stock' }).click();
+  await expect(page.getByRole('heading', { name: 'Two jackets, one sale and a return.' })).toBeVisible();
+  await expect(page.getByRole('table')).toContainText('Low stock');
+  await expect.poll(() => page.locator('figure img').evaluate(img => img.naturalWidth)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Try this sale in the demo' }).click();
+  await expect(page).toHaveURL(/#pos$/);
+  await page.setViewportSize({width: 1280, height: 800});
   await expect(page.getByLabel('Store location')).toHaveValue('london');
   const search = page.getByLabel('Find a product or scan barcode');
   await search.fill('JKT-001');

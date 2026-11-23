@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Follow a £119.98 sample sale through the RetailPilot London register, inventory and returns.">
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/welcome.css">
+  <title>A jacket sale at Northline Outfitters · RetailPilot</title>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main navigation">
+      <a class="brand" href="/welcome.html"><img src="/mark.svg" width="34" height="34" alt="">RetailPilot</a>
+      <a href="/welcome.html#pricing">Pricing</a>
+      <a class="workspace" href="/">Open workspace</a>
+    </nav>
+  </header>
+  <main class="case-study">
+    <section class="hero" aria-labelledby="case-title">
+      <div>
+        <h1 id="case-title">Two jackets, one sale and a return.</h1>
+        <p>A customer buys two Canvas Field Jackets at the London branch of Northline Outfitters, our sample clothing shop. Follow the £119.98 sale from the till to the stock count, then put both jackets back on the shelf.</p>
+        <div class="actions"><button type="button" data-demo="Owner" data-open="pos">Try this sale in the demo</button></div>
+        <p class="note">Opens a fresh sample register with owner access so you can complete the return.</p>
+        <p id="feedback" role="status" aria-live="polite"></p>
+        <noscript>Enable JavaScript to open the demo.</noscript>
+      </div>
+      <figure>
+        <img src="/images/jacket-receipt.webp" width="627" height="536" alt="Paid cash receipt for two Canvas Field Jackets at £59.99 each, totalling £119.98.">
+        <figcaption>Sample receipt <span>London register</span></figcaption>
+      </figure>
+    </section>
+    <section class="case-details" aria-labelledby="repeat-title">
+      <div>
+        <h2 id="repeat-title">Follow the sale</h2>
+        <ol>
+          <li>In the London register, search for <code>JKT-001</code>. Select the jacket, add a second one and choose <strong>Checkout</strong>.</li>
+          <li>Confirm the cash payment. Keep the order number on the receipt. Exit the register and open <strong>Inventory</strong> to see the low-stock flag for London.</li>
+          <li>In <strong>Orders</strong>, open the receipt and choose <strong>Return order</strong>. Enter a reason, leave <strong>Return items to available stock</strong> checked and confirm. Check the London count again.</li>
+        </ol>
+      </div>
+      <table>
+        <caption>London inventory · JKT-001</caption>
+        <thead><tr><th scope="col">Stage</th><th scope="col">Units</th><th scope="col">Stock status</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Before checkout</th><td>10</td><td>In stock</td></tr>
+          <tr><th scope="row">Paid</th><td>8</td><td>Low stock</td></tr>
+          <tr><th scope="row">Refunded and restocked</th><td>10</td><td>In stock</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+  <footer><a href="/welcome.html">RetailPilot demo &amp; pricing</a><a href="/privacy.html">Customer privacy notice</a></footer>
+  <script type="module" src="/demo-entry.js"></script>
+</body>
+</html>
