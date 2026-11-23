@@ -1,5 +1,45 @@
 import { test, expect } from '@playwright/test';
 
+test('cashier can scan and complete checkout using only the keyboard',async({page})=>{
+  await page.request.post('/api/demo',{data:{role:'Cashier'}});
+  await page.goto('/#pos');
+  const search=page.getByRole('textbox',{name:'Find a product or scan barcode'});
+  await expect(search).toBeVisible();
+  await page.keyboard.press('F4');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  for(const code of ['JKT-001','5051100000000']){
+    await page.keyboard.press('F2');
+    await expect(search).toBeFocused();
+    await page.keyboard.type(code);
+    await page.keyboard.press('Enter');
+    await expect(search).toHaveValue('');
+  }
+  await page.keyboard.press('F4');
+  const dialog=page.getByRole('dialog',{name:'Checkout'});
+  await expect(dialog).toContainText('£119.98');
+  await page.keyboard.press('Control+k');
+  await expect(dialog).toBeVisible();
+  const confirm=dialog.getByRole('button',{name:'Confirm payment'});
+  for(let i=0;i<8 && !(await confirm.evaluate(el=>el===document.activeElement));i++)await page.keyboard.press('Tab');
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog',{name:/Order #/})).toContainText('Paid');
+  await page.keyboard.press('Escape');
+  await expect(search).toBeFocused();
+});
+
+test('customer form links to a readable mobile privacy notice',async({page})=>{
+  await page.setViewportSize({width:375,height:812});
+  await page.goto('/#customers');
+  await page.getByRole('button',{name:'Add customer'}).click();
+  const popup=page.waitForEvent('popup');
+  await page.getByRole('dialog').getByRole('link',{name:'Customer privacy notice'}).click();
+  const notice=await popup;
+  await expect(notice.getByRole('heading',{name:'Customer privacy notice'})).toBeVisible();
+  expect(await notice.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await expect(page.getByRole('dialog',{name:'Add customer'})).toBeVisible();
+});
+
 test('transfer updates both stores and links their movements',async({page})=>{
   await page.goto('/#inventory');
   await page.getByRole('button',{name:'Transfer stock'}).click();
