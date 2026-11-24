@@ -74,6 +74,8 @@ Use one row per variant, up to 500 rows and 256 KiB per file. Required headings 
 
 ## Workspaces and staff
 
+Platform operators can open `/platform.html` to search business workspaces by name or ID and review plan, billing status, store count, active staff memberships, catalog variants and order count. Demo workspaces are excluded. Directory access uses the signed-in identity and a server-side comma-separated list of exact principal IDs in `RETAILPILOT_PLATFORM_ADMINS`. The allowlist defaults to empty. For local use, first create and verify control of the intended local account, then add its principal (for example `local:operator@example.test`) in the Git-ignored `.env.local` and restart. For hosted use, specify the identity ID supplied by the authentication gateway.
+
 Owners can enable customer loyalty under **Settings → Edit loyalty program**. Business workspaces start with loyalty off and demos start with it on. Once enabled, each new paid sale linked to a customer earns one point per whole £1 of the final total. In POS, select the customer and choose **Use 100 points for 10% off** to redeem one reward. A manual discount and a reward cannot be combined. The balance covers all stores in that business.
 
 Pending Stripe orders reserve redeemed points until payment or expiry. A full refund restores the redeemed points and reverses the points earned on that sale. Returning a purchase after spending its points can leave a negative balance, which future earnings offset. Pausing the program keeps existing balances. Earlier sales retain their original terms.
@@ -114,4 +116,4 @@ On 23 November 2026, a £1.00 GBP card sale through hosted Stripe Checkout was v
 
 Catalog and variants, barcode lookup, store inventory, adjustments, low-stock alerts, POS discounts and configurable VAT, cash and test-card checkout, printed receipts, orders and full returns, store-specific dashboard periods, reports and CSV exports, customer history, suppliers and purchase-order receiving, role-based staff invitations, subscription limits and workspace settings.
 
-WhatsApp delivery, offline queue, AI forecasts, platform super-admin, custom domains, and production monitoring are later milestones.
+Platform account suspension and reactivation, WhatsApp delivery, offline queue, AI forecasts, custom domains, and production monitoring are later milestones.

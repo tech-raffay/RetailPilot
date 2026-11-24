@@ -3,7 +3,7 @@ import {readFile, mkdir} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {randomBytes,scrypt as derive,timingSafeEqual,createHash} from 'node:crypto';
 import {promisify} from 'node:util';
-import {api} from '../src/api.js';
+import {api,isPlatformAdmin} from '../src/api.js';
 import {flushEmail,mailReady} from '../src/email.js';
 import {openDatabase} from './local-db.mjs';
 const dir=resolve(process.env.RETAILPILOT_DATA_DIR||'.retailpilot');
@@ -41,6 +41,7 @@ async function auth(req,url,body,headers){
  const k=req.socket.remoteAddress,window=attempts.get(k)||{count:0,time:Date.now()};if(Date.now()-window.time>60000){window.count=0;window.time=Date.now()}attempts.set(k,window);if(++window.count>30)return fail('Please try again in a minute.');
  const account=sql.prepare('SELECT * FROM local_accounts WHERE email=?').get(email);
  if(path==='signup'||path==='reset'){
+   if(path==='signup'&&!account&&isPlatformAdmin('local:'+email,process.env))return fail('This account is reserved. Contact the platform operator.');
  if(pw.length<10)return fail('Use at least 10 characters for your password.');
  if(path==='signup'&&account)return fail('This account already exists.');
  if(path==='reset'&&(!account||account.recovery!==digest(param.get('recovery')||'')))return fail('Invalid recovery code.');

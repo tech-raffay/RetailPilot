@@ -36,7 +36,7 @@ export const searchInput=label=>`<label class="searchfield">${icon('search',17)}
 export async function api(path,data){const r=await fetch('/api/'+path,{method:data===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const v=await r.json();if(!r.ok)throw Object.assign(new Error(v.error||'Request failed'),{status:r.status});return v}
 export async function load(){
  const r=await api('state');
- Object.assign(ctx,{s:r.workspace,member:r.member,members:r.members,cardEnabled:r.cardEnabled,localAuth:r.localAuth,emailEnabled:r.emailEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});
+ Object.assign(ctx,{s:r.workspace,platformAdmin:r.platformAdmin,member:r.member,members:r.members,cardEnabled:r.cardEnabled,localAuth:r.localAuth,emailEnabled:r.emailEnabled,billingEnabled:r.billingEnabled,signedIn:r.signedIn});
  if(ctx.store!=='all'&&!ctx.s.stores.some(s=>s.id===ctx.store))ctx.store='all';
  const customer=ctx.s.customers.find(c=>c.id===ctx.customer);
  if(ctx.customer&&!customer){ctx.customer='';ctx.cartKey=crypto.randomUUID()}

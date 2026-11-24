@@ -16,6 +16,36 @@ async function call(path,body,cookie='',person='',email='',env={}){
 }
 async function demo(role='Owner'){const r=await call('demo',{role});assert.equal(r.status,200);return r.cookie}
 const cart=(key,qty=2)=>({key,method:'Cash',store:'london',items:[{id:'JKT-001',qty}],received:200000});
+test('platform directory requires an approved identity and only exposes business usage',async t=>{
+ const db=openDatabase(); t.after(()=>db.raw.close());
+ const env={DB:db,RETAILPILOT_PLATFORM_ADMINS:'ops-two, ops-one, demo:fixture'};
+ const directory=(suffix='',person='ops-one',body,cookie='')=>call('platform/businesses'+suffix,body,cookie,person,'',env);
+ const owner=(await call('onboard',{name:'100% Cotton',owner:'Private Owner',store:'London'},'','merchant','',env)).cookie;
+ const merchant=(path,body)=>call(path,body,owner,'merchant','',env);
+ const id=(await merchant('identity')).body.workspaces[0].org_id;
+ const product=await merchant('product',{sku:'DIR',name:'Private product',category:'Test',price:100,cost:10,threshold:0,quantity:2,store:'london'});
+ assert.equal((await merchant('checkout',{...cart('directory-order',1),items:[{id:product.body.id,qty:1}]})).status,200);
+ await call('demo',{role:'Cashier'},'','','',env);
+ assert.equal((await directory('','')).status,401);
+ assert.equal((await directory('','merchant',undefined,owner)).status,403);
+ assert.equal((await directory('','demo:fixture')).status,403);
+ assert.equal((await directory('','ops')).status,403);
+ assert.equal((await call('platform/businesses',undefined,'','ops-one','',{DB:db})).status,403);
+ assert.equal((await directory('','ops-one',{})).status,405);
+ assert.equal((await directory('?page=0')).status,400);
+ const {workspace}= (await merchant('state')).body;
+ const expected={id,name:'100% Cotton',plan:workspace.plan,billing:workspace.billing,stores:1,staff:1,variants:1,orders:1};
+ assert.deepEqual((await directory()).body,{businesses:[expected],page:1,hasMore:false});
+ assert.deepEqual((await directory('?q='+id)).body.businesses,[expected]);
+ const insert=db.raw.prepare('INSERT INTO organizations(id,document) VALUES(?,?)');
+ for(let i=0;i<25;i++)insert.run('org-'+i,JSON.stringify({...workspace,name:'Another shop'}));
+ assert.deepEqual((await directory('?q=%25')).body.businesses,[expected]);
+ assert.deepEqual((await directory('?q=COTTON')).body.businesses,[expected]);
+ const first=(await directory()).body,second=(await directory('?page=2')).body;
+ assert.equal(first.businesses.length,25);assert.equal(first.hasMore,true);
+ assert.equal(second.businesses.length,1);assert.equal(second.hasMore,false);
+ assert.equal(new Set([...first.businesses,...second.businesses].map(b=>b.id)).size,26);
+});
 test('storefront limits public data and shares inventory with the register',async()=>{
  const owner=await demo();
  const state=async()=>(await call('state',undefined,owner)).body.workspace;

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Business directory · RetailPilot</title>
+  <link rel="icon" href="/mark.svg">
+  <link rel="stylesheet" href="/welcome.css">
+  <style>
+    main { padding: 2.5rem 0; }
+    h1 { font-size: clamp(2.4rem,5vw,4rem); max-width: none; }
+    form, .pager { display:flex; gap:.7rem; align-items:center; flex-wrap:wrap; margin:1.5rem 0; }
+    input { font:inherit; padding:.65rem; width:min(100%,22rem); }
+    .scroll { overflow:auto; background:white; }
+    table { border-collapse:collapse; width:100%; }
+    td, th { padding:.8rem; text-align:left; border-bottom:1px solid #dce0e9; }
+    small { display:block; color:#506079; margin-top:.25rem; }
+    #status { margin:1rem 0; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <header><nav><a class="brand" href="/"><img src="/mark.svg" width="32" height="32" alt="">RetailPilot</a><a href="/">Open workspace</a></nav></header>
+  <main>
+    <h1>Business directory</h1>
+    <form id="search" hidden><input type="search" id="query" aria-label="Business name or workspace ID" placeholder="Business name or workspace ID" maxlength="120"><button type="submit">Search</button></form>
+    <p id="status" role="status">Loading businesses…</p>
+    <a id="signin" href="/signin-with-chatgpt?return_to=/platform.html" hidden>Sign in</a>
+    <section id="results" class="scroll" aria-label="Business usage" hidden>
+      <table><thead><tr><th>Business</th><th>Plan</th><th>Billing</th><th>Stores</th><th>Staff</th><th>Variants</th><th>Orders</th></tr></thead><tbody></tbody></table>
+    </section>
+    <div id="pager" class="pager" hidden><button id="prev">Previous</button><span id="number"></span><button id="next">Next</button></div>
+  </main>
+  <script type="module" src="/platform.js"></script>
+</body>
+</html>

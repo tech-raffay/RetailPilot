@@ -5,6 +5,15 @@ test.beforeEach(async ({context}) => {
   await context.route('https://fonts.googleapis.com/**', route => route.fulfill({contentType:'text/css',body:''}));
 });
 
+test('platform directory prompts visitors to sign in and preserves their return destination', async ({page}) => {
+  await page.goto('/platform.html');
+  await expect(page.getByRole('searchbox')).toBeHidden();
+  await page.getByRole('link',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Sign in'})).toBeVisible();
+  const action=await page.locator('form').getAttribute('action');
+  expect(new URL(action,page.url()).searchParams.get('return_to')).toBe('/platform.html');
+});
+
 test('sales report prints the selected store, UTC dates and matching product totals', async ({page}) => {
   await page.setViewportSize({width:375,height:812});
   await page.goto('/#reports');

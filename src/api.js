@@ -25,6 +25,28 @@ async function write(db,id,fn,env,removedCustomer){
   fail('Another sale is being saved. Please retry.',409);
 }
 function principal(req){return req.headers.get('oai-authenticated-user-id')}
+export function isPlatformAdmin(id,env){
+  return !!id&&!id.startsWith('demo:')&&(env.RETAILPILOT_PLATFORM_ADMINS||'').split(',').some(value=>value.trim()===id);
+}
+async function businessDirectory(req,env,url){
+  const id=principal(req);
+  if(!id)fail('Sign in to open platform administration.',401);
+  if(!isPlatformAdmin(id,env))fail('Platform administrator access is required.',403);
+  if(req.method!=='GET')fail('Method not allowed.',405);
+  const page=Number(url.searchParams.get('page')??1);
+  if(!Number.isSafeInteger(page)||page<1||page>1000000)fail('Invalid page number.');
+  const term=(url.searchParams.get('q')||'').trim().slice(0,120);
+  const pageSize=25;
+  const result=await query(env.DB,`SELECT o.id, json_extract(document,'$.name') AS name,
+    json_extract(document,'$.plan') AS plan, json_extract(document,'$.billing') AS billing,
+    json_array_length(document,'$.stores') AS stores, json_array_length(document,'$.products') AS variants,
+    json_array_length(document,'$.orders') AS orders,
+    (SELECT COUNT(*) FROM members m WHERE m.org_id=o.id) AS staff
+    FROM organizations o WHERE json_extract(document,'$.demo') IS NOT 1 AND
+    (instr(lower(json_extract(document,'$.name')),lower(?))>0 OR o.id=?)
+    ORDER BY name COLLATE NOCASE,o.id LIMIT ? OFFSET ?`,term,term,pageSize+1,(page-1)*pageSize).all();
+  return json({businesses:result.results.slice(0,pageSize),page,hasMore:result.results.length>pageSize});
+}
 function mail(req){return req.headers.get('oai-authenticated-user-email')?.trim().toLowerCase()||''}
 async function session(req,db){
   const t=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)rp_session=([a-f0-9-]+)/)?.[1];
@@ -162,6 +184,7 @@ export async function api(req,env){
  try{
   const u=new URL(req.url),path=u.pathname.slice('/api/'.length),db=env.DB;
   if(!db)fail('Workspace storage is unavailable.',503);
+  if(path==='platform/businesses')return await businessDirectory(req,env,u);
   if(path==='stripe/webhook'&&req.method==='POST')return await webhook(req,env);
   if(req.method==='POST'&&req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)fail('Invalid request origin.',403);
   const b=req.method==='POST'?await req.json():{};
@@ -228,7 +251,7 @@ export async function api(req,env){
     }
     if(m.role==='Cashier'){s.orders=s.orders.filter(o=>Date.now()-o.date<86400000*30);s.products=s.products.map(({cost,...p})=>p);s.orders.forEach(o=>o.items.forEach(i=>{delete i.cost}));s.movements=[];s.suppliers=[];s.purchaseOrders=[];delete s.stripeCustomer;delete s.subscription;delete s.plan;delete s.billing}
     delete s.events;delete s.audit;delete s.catalogImports;
-    return json({workspace:s,member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),localAuth:env.LOCAL_AUTH===true,emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
+    return json({workspace:s,platformAdmin:isPlatformAdmin(principal(req),env),member:{name:m.name,email:m.email,role:m.role},members:m.role==='Owner'?await members(db,id):[],cardEnabled:!!(stripeReady(env)&&s.stripeAccount),localAuth:env.LOCAL_AUTH===true,emailEnabled:mailReady(env)&&!s.demo,billingEnabled:stripeReady(env),signedIn:!!principal(req)});
   }
   if(req.method!=='POST')fail('Route not found.',404);
   if(path==='logout'){const t=(req.headers.get('Cookie')||'').match(/rp_session=([a-f0-9-]+)/)?.[1];if(t)await query(db,'DELETE FROM sessions WHERE token=?',await hash(t)).run();return json({ok:true},200,{'Set-Cookie':'rp_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0'})}
